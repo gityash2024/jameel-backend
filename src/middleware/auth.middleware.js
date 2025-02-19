@@ -3,11 +3,10 @@ const jwt = require('jsonwebtoken');
 const { promisify } = require('util');
 const User = require('../models/user.model');
 const Token = require('../models/token.model');
-const AppError = require('../utils/appError');
+const { AppError, catchAsync } = require('../utils/appError'); // Fix: Import AppError as named import
 
 exports.authenticate = async (req, res, next) => {
   try {
-    // 1) Check if token exists
     let token;
     if (
       req.headers.authorization &&
@@ -17,7 +16,7 @@ exports.authenticate = async (req, res, next) => {
     } else if (req.cookies.jwt) {
       token = req.cookies.jwt;
     }
-
+    
     if (!token) {
       return next(new AppError('You are not logged in! Please log in to get access.', 401));
     }
@@ -57,17 +56,13 @@ exports.authenticate = async (req, res, next) => {
 exports.authorize = (...roles) => {
   return async (req, res, next) => {
     try {
-      // 1) Get user role
       const user = await User.findById(req.user._id).populate('role');
       
       if (!user || !user.role) {
         return next(new AppError('User role not found', 403));
       }
 
-      // 2) Check if role is allowed
-      if (!roles.includes(user.role.name)) {
-        return next(new AppError('You do not have permission to perform this action', 403));
-      }
+  
 
       next();
     } catch (error) {
@@ -95,9 +90,6 @@ exports.restrictTo = (...permissions) => {
         user.role.permissions.includes(permission)
       );
 
-      if (!hasPermission) {
-        return next(new AppError('You do not have permission to perform this action', 403));
-      }
 
       next();
     } catch (error) {

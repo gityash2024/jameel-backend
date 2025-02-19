@@ -288,7 +288,7 @@ exports.deleteReview = catchAsync(async (req, res, next) => {
     await deleteFromCloudinary(image.public_id);
   }
 
-  await review.remove();
+  await review.deleteOne();
 
   // Update product rating
   await updateProductRating(review.product);

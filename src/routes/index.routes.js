@@ -19,6 +19,9 @@ const mediaRoutes = require('./media.routes');
 const storeRoutes = require('./store.routes');
 const inventoryRoutes = require('./inventory.routes');
 const couponRoutes = require('./coupon.routes');
+const roleRoutes = require('./role.routes');
+const tagRoutes = require('./tag.routes');
+
 
 // Rate limiting setup
 const apiLimiter = rateLimit({
@@ -63,11 +66,13 @@ router.use('/payments', paymentRoutes);
 router.use('/shipping', shippingRoutes);
 router.use('/appointments', appointmentRoutes);
 router.use('/reviews', reviewRoutes);
-router.use('/blog', blogRoutes);
+router.use('/blogs', blogRoutes);
 router.use('/media', mediaRoutes);
 router.use('/stores', storeRoutes);
 router.use('/inventory', inventoryRoutes);
 router.use('/coupons', couponRoutes);
+router.use('/roles', roleRoutes);
+router.use('/tags', tagRoutes);
 
 // Version info endpoint
 router.get('/version', (req, res) => {

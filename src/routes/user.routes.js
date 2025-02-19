@@ -82,6 +82,11 @@ router.put('/notifications/preferences', validate({
     newsletter: 'required|boolean'
   }
 }), userController.updateNotificationPreferences);
+// Admin Routes
+router.get('/', authenticate, authorize('admin'), userController.getAllUsers);
+router.get('/:id', authenticate, authorize('admin'), userController.getUser);
+router.put('/:id', authenticate, authorize('admin'), userController.updateUser);
+router.delete('/:id', authenticate, authorize('admin'), userController.deleteUser);
 
 // Payment methods
 router.get('/payment-methods', userController.getPaymentMethods);

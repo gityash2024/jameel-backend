@@ -25,11 +25,11 @@ const blogSchema = new mongoose.Schema({
   },
   categories: [{
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'BlogCategory'
+    ref: 'Category'
   }],
   tags: [{
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'BlogTag'
+    ref: 'Tag'
   }],
   featuredImage: {
     public_id: String,

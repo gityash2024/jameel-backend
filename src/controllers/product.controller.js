@@ -2,13 +2,13 @@
 const Product = require('../models/product.model');
 const Variant = require('../models/variant.model');
 const Category = require('../models/category.model');
+const APIFeatures = require('../utils/apiFeatures');
+
 const Review = require('../models/review.model');
 const { uploadToCloudinary, deleteFromCloudinary } = require('../../config/cloudinary');
-const AppError = require('../utils/appError');
-const {catchAsync} = require('../utils/appError');
-const APIFeatures = require('../utils/apiFeatures');
-const {cache} = require('../middleware/cache.middleware');
-
+const { AppError, catchAsync } = require('../utils/appError'); // Fix: Import AppError as named import
+// const APIFeatures = require('../utils/apiFeatures');
+const { cache } = require('../middleware/cache.middleware');
 exports.uploadProductImages = catchAsync(async (req, res, next) => {
   if (!req.files) return next();
 
@@ -238,15 +238,17 @@ exports.getFeaturedProducts = catchAsync(async (req, res) => {
       }
     });
   });
-  
   exports.createProduct = catchAsync(async (req, res) => {
+    const { images, ...productData } = req.body;
+    const parsedImages = JSON.parse(images);
+  
     const product = await Product.create({
-      ...req.body,
+      ...productData,
+      images: parsedImages,
       createdBy: req.user._id
     });
   
     // Clear cache
-    await cache.deleteCache('products:*');
   
     res.status(201).json({
       status: 'success',
@@ -255,7 +257,6 @@ exports.getFeaturedProducts = catchAsync(async (req, res) => {
       }
     });
   });
-  
   exports.updateProduct = catchAsync(async (req, res, next) => {
     const product = await Product.findById(req.params.id);
   
@@ -285,7 +286,7 @@ exports.getFeaturedProducts = catchAsync(async (req, res) => {
     await product.save();
   
     // Clear cache
-    await cache.deleteCache('products:*');
+    await('products:*');
   
     res.status(200).json({
       status: 'success',
@@ -302,15 +303,10 @@ exports.getFeaturedProducts = catchAsync(async (req, res) => {
       return next(new AppError('Product not found', 404));
     }
   
-    // Delete product images
-    for (const image of product.images) {
-      await deleteFromCloudinary(image.public_id);
-    }
-  
-    await product.remove();
+   
+    await product.deleteOne();
   
     // Clear cache
-    await cache.deleteCache('products:*');
   
     res.status(204).json({
       status: 'success',
@@ -377,7 +373,7 @@ exports.getFeaturedProducts = catchAsync(async (req, res) => {
       await deleteFromCloudinary(image.public_id);
     }
   
-    await variant.remove();
+    await variant.deleteOne();
   
     res.status(204).json({
       status: 'success',
@@ -470,8 +466,6 @@ exports.getFeaturedProducts = catchAsync(async (req, res) => {
       }))
     );
   
-    // Clear cache
-    await cache.deleteCache('products:*');
   
     res.status(201).json({
       status: 'success',
@@ -497,7 +491,6 @@ exports.getFeaturedProducts = catchAsync(async (req, res) => {
     );
   
     // Clear cache
-    await cache.deleteCache('products:*');
   
     res.status(200).json({
       status: 'success',
@@ -521,7 +514,6 @@ exports.getFeaturedProducts = catchAsync(async (req, res) => {
     await Product.deleteMany({ _id: { $in: req.body.ids } });
   
     // Clear cache
-    await cache.deleteCache('products:*');
   
     res.status(204).json({
       status: 'success',

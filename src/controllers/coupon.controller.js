@@ -211,7 +211,7 @@ exports.deleteCoupon = catchAsync(async (req, res, next) => {
     return next(new AppError('Coupon not found', 404));
   }
 
-  await coupon.remove();
+  await coupon.deleteOne();
 
   res.status(204).json({
     status: 'success',

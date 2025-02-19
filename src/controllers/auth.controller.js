@@ -1,13 +1,11 @@
-// src/controllers/auth.controller.js
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const User = require('../models/user.model');
 const Token = require('../models/token.model');
-const AppError = require('../utils/appError');
+const Role = require('../models/roles.model'); // Fix: Correct model name
+const { AppError, catchAsync } = require('../utils/appError'); // Fix: Import AppError as named import
 const { sendEmail } = require('../services/email.service');
 const { sendSms } = require('../services/sms.service');
-const { catchAsync } = require('../utils/appError');
-
 
 // Generate JWT token
 const signToken = (id) => {
@@ -43,68 +41,55 @@ const createSendToken = (user, statusCode, res) => {
   });
 };
 
-exports.register = catchAsync(async (req, res) => {
-  const { firstName, lastName, email, phone, password } = req.body;
+// In auth.controller.js - update login function
+exports.login = catchAsync(async (req, res, next) => {
+  const { email, password } = req.body;
 
-  // Create user
+  if (!email || !password) {
+    return next(new AppError('Please provide email and password', 400));
+  }
+
+  // Update this line to populate role
+  const user = await User.findOne({ email: email.toLowerCase() })
+    .select('+password')
+    .populate('role');
+
+  if (!user || !(await user.comparePassword(password))) {
+    return next(new AppError('Incorrect email or password', 401));
+  }
+
+  if (!user.isActive) {
+    return next(new AppError('Your account has been deactivated', 401));
+  }
+
+  user.lastLogin = Date.now();
+  await user.save({ validateBeforeSave: false });
+
+  createSendToken(user, 200, res);
+});
+
+// Update register function
+exports.register = catchAsync(async (req, res, next) => {
+  const { firstName, lastName, email, phone, password, role = 'customer' } = req.body;
+
+  const roleDoc = await Role.findOne({ name: role });
+  if (!roleDoc) {
+    return next(new AppError('Invalid role specified', 400));
+  }
+
   const user = await User.create({
     firstName,
     lastName,
     email: email.toLowerCase(),
     phone,
     password,
-    role: 'customer' // Default role
+    role: roleDoc._id
   });
 
-  // Generate verification token
-  const verificationToken = crypto.randomBytes(32).toString('hex');
-  await Token.create({
-    user: user._id,
-    token: verificationToken,
-    type: 'email_verification',
-    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
-  });
+  // Populate role before sending response
+  const populatedUser = await User.findById(user._id).populate('role');
 
-  // Send welcome email with verification link
-  const verificationUrl = `${process.env.FRONTEND_URL}/verify-email/${verificationToken}`;
-  await sendEmail(user.email, 'Welcome to JSK Jewelry', 'welcome', {
-    firstName: user.firstName,
-    verificationUrl
-  });
-
-  // Send verification SMS
-  if (user.phone) {
-    await sendSms(user.phone, 'Welcome to JSK Jewelry! Please verify your email to complete registration.');
-  }
-
-  createSendToken(user, 201, res);
-});
-
-exports.login = catchAsync(async (req, res, next) => {
-  const { email, password } = req.body;
-
-  // Check if email and password exist
-  if (!email || !password) {
-    return next(new AppError('Please provide email and password', 400));
-  }
-
-  // Check if user exists && password is correct
-  const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
-
-  if (!user || !(await user.comparePassword(password))) {
-    return next(new AppError('Incorrect email or password', 401));
-  }
-
-  // Check if user is active
-  if (!user.isActive) {
-    return next(new AppError('Your account has been deactivated', 401));
-  }
-
-  // Update last login
-  user.lastLogin = Date.now();
-  await user.save({ validateBeforeSave: false });
-
-  createSendToken(user, 200, res);
+  createSendToken(populatedUser, 201, res);
 });
 
 exports.logout = catchAsync(async (req, res) => {

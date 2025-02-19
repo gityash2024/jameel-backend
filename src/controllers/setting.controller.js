@@ -54,7 +54,6 @@ exports.createSetting = catchAsync(async (req, res) => {
   });
 
   // Clear cache
-  await cache.deleteCache(`settings:${setting.group}`);
 
   res.status(201).json({
     status: 'success',
@@ -79,7 +78,6 @@ exports.updateSetting = catchAsync(async (req, res, next) => {
   await setting.save();
 
   // Clear cache
-  await cache.deleteCache(`settings:${setting.group}`);
 
   res.status(200).json({
     status: 'success',
@@ -99,10 +97,8 @@ exports.deleteSetting = catchAsync(async (req, res, next) => {
     return next(new AppError('Setting not found', 404));
   }
 
-  await setting.remove();
+  await setting.deleteOne();
 
-  // Clear cache
-  await cache.deleteCache(`settings:${setting.group}`);
 
   res.status(204).json({
     status: 'success',
@@ -120,8 +116,6 @@ exports.bulkUpdateSettings = catchAsync(async (req, res) => {
 
   await Setting.bulkWrite(operations);
 
-  // Clear all settings cache
-  await cache.deleteCache('settings:*');
 
   res.status(200).json({
     status: 'success',
@@ -170,8 +164,6 @@ exports.updateStoreSettings = catchAsync(async (req, res) => {
 
   await Setting.bulkWrite(updates);
 
-  // Clear store settings cache
-  await cache.deleteCache('settings:store');
 
   res.status(200).json({
     status: 'success',
@@ -217,8 +209,6 @@ exports.updateSeoSettings = catchAsync(async (req, res) => {
 
   await Setting.bulkWrite(updates);
 
-  // Clear SEO settings cache
-  await cache.deleteCache('settings:seo');
 
   res.status(200).json({
     status: 'success',
@@ -266,8 +256,6 @@ exports.updateEmailSettings = catchAsync(async (req, res) => {
 
   await Setting.bulkWrite(updates);
 
-  // Clear email settings cache  
-  await cache.deleteCache('settings:email');
 
   res.status(200).json({
     status: 'success',
@@ -313,8 +301,6 @@ exports.updateSocialMediaSettings = catchAsync(async (req, res) => {
 
   await Setting.bulkWrite(updates);
 
-  // Clear social settings cache
-  await cache.deleteCache('settings:social');
 
   res.status(200).json({ 
     status: 'success',
@@ -358,8 +344,6 @@ exports.updateApiSettings = catchAsync(async (req, res) => {
 
   await Setting.bulkWrite(updates);
 
-  // Clear API settings cache
-  await cache.deleteCache('settings:api');
 
   res.status(200).json({
     status: 'success',
@@ -404,8 +388,6 @@ exports.updateSecuritySettings = catchAsync(async (req, res) => {
 
   await Setting.bulkWrite(updates);
 
-  // Clear security settings cache
-  await cache.deleteCache('settings:security');
 
   res.status(200).json({
     status: 'success',
@@ -417,9 +399,7 @@ exports.clearCache = catchAsync(async (req, res, next) => {
   const { group, key } = req.body;
 
   if (group && key) {
-    await cache.deleteCache(`settings:${group}:${key}`);
   } else if (group) {
-    await cache.deleteCache(`settings:${group}:*`);
   } else {
     return next(new AppError('Group or group and key must be provided', 400));
   }
@@ -431,7 +411,6 @@ exports.clearCache = catchAsync(async (req, res, next) => {
 });
 
 exports.clearAllCache = catchAsync(async (req, res) => {
-  await cache.deleteCache('settings:*');
 
   res.status(200).json({
     status: 'success',
@@ -465,9 +444,7 @@ exports.restoreSettingsFromBackup = catchAsync(async (req, res) => {
   await Setting.deleteMany();
   await Setting.insertMany(backupSettings);
 
-  // Clear all settings cache
-  await cache.deleteCache('settings:*');
-
+    
   res.status(200).json({
     status: 'success',
     message: 'Settings restored successfully'
@@ -493,8 +470,6 @@ exports.importSettings = catchAsync(async (req, res) => {
   await Setting.deleteMany();
   await Setting.insertMany(settings);
 
-  // Clear all settings cache
-  await cache.deleteCache('settings:*');
 
   res.status(200).json({
     status: 'success',

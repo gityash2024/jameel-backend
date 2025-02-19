@@ -1,4 +1,3 @@
-// models/media.model.js
 const mongoose = require('mongoose');
 
 const mediaSchema = new mongoose.Schema({
@@ -11,39 +10,15 @@ const mediaSchema = new mongoose.Schema({
     required: true,
     enum: ['image', 'video', 'document']
   },
-  mimeType: {
-    type: String,
-    required: true
-  },
-  size: {
-    type: Number,
-    required: true
-  },
-  public_id: {
-    type: String,
-    required: true
-  },
   url: {
     type: String,
     required: true
   },
-  thumbnailUrl: String,
   alt: String,
   caption: String,
   uploadedBy: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-  },
-  usage: [{
-    model: String,
-    documentId: mongoose.Schema.Types.ObjectId
-  }],
-  metadata: {
-    width: Number,
-    height: Number,
-    duration: Number,
-    tags: [String]
+    ref: 'User'
   },
   folder: {
     type: String,

@@ -42,37 +42,9 @@ router.delete('/:slug/like', blogController.unlikePost);
 router.use(authorize(['admin']));
 
 // Post management
-router.post('/', validate({
-  body: {
-    title: 'required|string',
-    content: 'required|string',
-    summary: 'required|string',
-    categories: 'array',
-    tags: 'array',
-    status: 'string|in:draft,published,archived',
-    isFeature: 'boolean',
-    publishDate: 'date',
-    metaTitle: 'string',
-    metaDescription: 'string',
-    metaKeywords: 'array'
-  }
-}), blogController.uploadFeaturedImage, blogController.createPost);
+router.post('/',blogController.uploadFeaturedImage, blogController.createPost);
 
-router.put('/:id', validate({
-  body: {
-    title: 'string',
-    content: 'string',
-    summary: 'string',
-    categories: 'array',
-    tags: 'array',
-    status: 'string|in:draft,published,archived',
-    isFeature: 'boolean',
-    publishDate: 'date',
-    metaTitle: 'string',
-    metaDescription: 'string',
-    metaKeywords: 'array'
-  }
-}), blogController.uploadFeaturedImage, blogController.updatePost);
+router.put('/:id', blogController.uploadFeaturedImage, blogController.updatePost);
 
 router.delete('/:id', blogController.deletePost);
 

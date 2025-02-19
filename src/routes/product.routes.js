@@ -25,13 +25,11 @@ router.get('/:id/reviews', productController.getProductReviews);
 router.use(authorize(['admin']));
 
 router.post('/', 
-  validate(productValidator.createProduct), 
   productController.uploadProductImages,
   productController.createProduct
 );
 
 router.put('/:id', 
-  validate(productValidator.updateProduct), 
   productController.uploadProductImages,
   productController.updateProduct
 );

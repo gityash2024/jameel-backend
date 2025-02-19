@@ -34,7 +34,6 @@ exports.createCategory = catchAsync(async (req, res) => {
   });
 
   // Clear cache
-  await cache.deleteCache('blog-categories:*');
 
   res.status(201).json({
     status: 'success',
@@ -55,7 +54,6 @@ exports.updateCategory = catchAsync(async (req, res, next) => {
   await category.save();
 
   // Clear cache
-  await cache.deleteCache('blog-categories:*');
 
   res.status(200).json({
     status: 'success',
@@ -78,10 +76,9 @@ exports.deleteCategory = catchAsync(async (req, res, next) => {
     return next(new AppError('Cannot delete category with associated blog posts', 400));
   }
 
-  await category.remove();
+  await category.deleteOne();
 
   // Clear cache
-  await cache.deleteCache('blog-categories:*');
 
   res.status(204).json({
     status: 'success',
@@ -98,7 +95,6 @@ exports.createTag = catchAsync(async (req, res) => {
   });
 
   // Clear cache
-  await cache.deleteCache('blog-tags:*');
 
   res.status(201).json({
     status: 'success',
@@ -119,7 +115,6 @@ exports.updateTag = catchAsync(async (req, res, next) => {
   await tag.save();
 
   // Clear cache
-  await cache.deleteCache('blog-tags:*');
 
   res.status(200).json({
     status: 'success',
@@ -142,10 +137,9 @@ exports.deleteTag = catchAsync(async (req, res, next) => {
     return next(new AppError('Cannot delete tag with associated blog posts', 400));
   }
 
-  await tag.remove();
+  await tag.deleteOne();
 
   // Clear cache
-  await cache.deleteCache('blog-tags:*');
 
   res.status(204).json({
     status: 'success',
@@ -288,8 +282,6 @@ exports.createPost = catchAsync(async (req, res) => {
     author: req.user._id
   });
 
-  // Clear cache
-  await cache.deleteCache('blog:*');
 
   res.status(201).json({
     status: 'success',
@@ -315,7 +307,6 @@ exports.updatePost = catchAsync(async (req, res, next) => {
   await post.save();
 
   // Clear cache
-  await cache.deleteCache('blog:*');
 
   res.status(200).json({
     status: 'success',
@@ -337,10 +328,9 @@ exports.deletePost = catchAsync(async (req, res, next) => {
     await deleteFromCloudinary(post.featuredImage.public_id);
   }
 
-  await post.remove();
+  await post.deleteOne();
 
   // Clear cache
-  await cache.deleteCache('blog:*');
 
   res.status(204).json({
     status: 'success',
@@ -453,7 +443,7 @@ exports.deleteComment = catchAsync(async (req, res, next) => {
     return next(new AppError('Comment not found', 404));
   }
 
-  await comment.remove();
+  await comment.deleteOne();
 
   res.status(204).json({
     status: 'success',

@@ -123,7 +123,7 @@ exports.deleteOrder = catchAsync(async (req, res, next) => {
   await restoreInventory(order);
 
   // Delete the order
-  await order.remove();
+  await order.deleteOne();
 
   res.status(204).json({
     status: 'success',

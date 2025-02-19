@@ -17,7 +17,77 @@ exports.getProfile = catchAsync(async (req, res) => {
     }
   });
 });
+// Admin Routes
 
+exports.getAllUsers = catchAsync(async (req, res) => {
+  const users = await User.find().populate('role', 'name');
+
+  res.status(200).json({
+    status: 'success',
+    data: {
+      users
+    }
+  });
+});
+
+exports.getUser = catchAsync(async (req, res, next) => {
+  const user = await User.findById(req.params.id).populate('role', 'name');
+
+  if (!user) {
+    return next(new AppError('User not found', 404));
+  }
+
+  res.status(200).json({
+    status: 'success',
+    data: {
+      user
+    }
+  });
+});
+
+exports.updateUser = catchAsync(async (req, res, next) => {
+  const { firstName, lastName, email, phone, role, isActive } = req.body;
+
+  const user = await User.findByIdAndUpdate(
+    req.params.id,
+    {
+      firstName,
+      lastName,
+      email,
+      phone,
+      role,
+      isActive
+    },
+    {
+      new: true,
+      runValidators: true
+    }
+  ).populate('role', 'name');
+
+  if (!user) {
+    return next(new AppError('User not found', 404));
+  }
+
+  res.status(200).json({
+    status: 'success',
+    data: {
+      user
+    }
+  });
+});
+
+exports.deleteUser = catchAsync(async (req, res, next) => {
+  const user = await User.findByIdAndDelete(req.params.id);
+
+  if (!user) {
+    return next(new AppError('User not found', 404));
+  }
+
+  res.status(204).json({
+    status: 'success',
+    data: null
+  });
+});
 exports.updateProfile = catchAsync(async (req, res) => {
   const user = await User.findByIdAndUpdate(
     req.user._id,
