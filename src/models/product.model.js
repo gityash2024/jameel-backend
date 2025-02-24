@@ -28,11 +28,18 @@ const productSchema = new mongoose.Schema({
     required: true,
     enum: ['physical', 'digital']
   },
-  category: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Category',
-    required: true
-  },
+ // In productSchema, update the category and subCategories fields:
+
+category: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: 'Category',
+  required: true
+},
+subcategory: {  // Changed from subCategories array to single subcategory
+  type: mongoose.Schema.Types.ObjectId,
+  ref: 'Subcategory',
+  required: true
+},
   subCategories: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Category'

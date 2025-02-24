@@ -41,8 +41,9 @@ exports.getAllProducts = catchAsync(async (req, res) => {
     .search(['name', 'description', 'brand']);
 
   const products = await features.query
-    .populate('category')
-    .populate('variants');
+  .populate('category')
+  .populate('subcategory')  // Add this line
+  .populate('variants');
 
   const total = await Product.countDocuments();
 
@@ -110,17 +111,18 @@ exports.getFeaturedProducts = catchAsync(async (req, res) => {
   
   exports.getProductBySlug = catchAsync(async (req, res, next) => {
     const product = await Product.findOne({ slug: req.params.slug })
-      .populate('category')
-      .populate('variants')
-      .populate('collections')
-      .populate({
-        path: 'reviews',
-        select: 'rating title content user createdAt',
-        populate: {
-          path: 'user',
-          select: 'firstName lastName avatar'
-        }
-      });
+    .populate('category')
+  .populate('subcategory')  // Add this line
+  .populate('variants')
+  .populate('collections')
+  .populate({
+    path: 'reviews',
+    select: 'rating title content user createdAt',
+    populate: {
+      path: 'user',
+      select: 'firstName lastName avatar'
+    }
+  });
   
     if (!product) {
       return next(new AppError('Product not found', 404));

@@ -21,6 +21,7 @@ const inventoryRoutes = require('./inventory.routes');
 const couponRoutes = require('./coupon.routes');
 const roleRoutes = require('./role.routes');
 const tagRoutes = require('./tag.routes');
+const subCategoryRoutes = require('./subcategory.routes');
 
 
 // Rate limiting setup
@@ -73,6 +74,8 @@ router.use('/inventory', inventoryRoutes);
 router.use('/coupons', couponRoutes);
 router.use('/roles', roleRoutes);
 router.use('/tags', tagRoutes);
+router.use('/subcategories', subCategoryRoutes);
+
 
 // Version info endpoint
 router.get('/version', (req, res) => {
