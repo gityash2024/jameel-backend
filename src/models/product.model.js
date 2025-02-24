@@ -25,7 +25,6 @@ const productSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    required: true,
     enum: ['physical', 'digital']
   },
  // In productSchema, update the category and subCategories fields:
@@ -48,10 +47,7 @@ subcategory: {  // Changed from subCategories array to single subcategory
     type: String,
     required: true
   },
-  tags: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Tag'
-  }],
+ 
   regularPrice: {
     type: Number,
     required: [true, 'Regular price is required'],
