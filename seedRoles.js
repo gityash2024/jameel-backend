@@ -8,16 +8,29 @@ async function seedRoles() {
   try {
     await mongoose.connect(MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true });
 
-    const adminRole = { name: 'admin', permissions: ['all'] };
+    const roles = [
+      {
+        name: 'admin',
+        permissions: ['all']
+      },
+      {
+        name: 'customer',
+        permissions: ['all']
+        // permissions: ['view_products', 'place_orders', 'manage_profile']
+      }
+    ];
 
-    const existingRole = await Role.findOne({ name: 'admin' });
-    if (existingRole) {
-      console.log('Admin role already exists');
-    } else {
-      await Role.create(adminRole);
-      console.log('Admin role seeded successfully');
+    for (const role of roles) {
+      const existingRole = await Role.findOne({ name: role.name });
+      if (existingRole) {
+        console.log(`${role.name} role already exists`);
+      } else {
+        await Role.create(role);
+        console.log(`${role.name} role seeded successfully`);
+      }
     }
 
+    console.log('Role seeding completed');
     mongoose.connection.close();
   } catch (error) {
     console.error('Error seeding roles:', error);

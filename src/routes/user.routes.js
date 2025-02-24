@@ -27,37 +27,9 @@ router.put('/profile/avatar',
 
 // Address management
 router.get('/addresses', userController.getAddresses);
-router.post('/addresses', validate({
-  body: {
-    type: 'required|string|in:home,work,other',
-    firstName: 'required|string',
-    lastName: 'required|string',
-    address1: 'required|string',
-    address2: 'string',
-    city: 'required|string',
-    state: 'required|string',
-    postalCode: 'required|string',
-    country: 'required|string',
-    phone: 'required|string',
-    isDefault: 'boolean'
-  }
-}), userController.addAddress);
+router.post('/addresses', userController.addAddress);
 
-router.put('/addresses/:id', validate({
-  body: {
-    type: 'string|in:home,work,other',
-    firstName: 'string',
-    lastName: 'string',
-    address1: 'string',
-    address2: 'string',
-    city: 'string',
-    state: 'string',
-    postalCode: 'string',
-    country: 'string',
-    phone: 'string',
-    isDefault: 'boolean'
-  }
-}), userController.updateAddress);
+router.put('/addresses/:id', userController.updateAddress);
 
 router.delete('/addresses/:id', userController.deleteAddress);
 router.put('/addresses/:id/default', userController.setDefaultAddress);

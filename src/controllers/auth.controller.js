@@ -71,7 +71,7 @@ exports.login = catchAsync(async (req, res, next) => {
 // Update register function
 exports.register = catchAsync(async (req, res, next) => {
   const { firstName, lastName, email, phone, password, role = 'customer' } = req.body;
-
+console.log(req.body,Role?.find())
   const roleDoc = await Role.findOne({ name: role });
   if (!roleDoc) {
     return next(new AppError('Invalid role specified', 400));
