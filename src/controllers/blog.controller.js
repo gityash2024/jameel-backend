@@ -395,7 +395,7 @@ exports.addComment = catchAsync(async (req, res, next) => {
     user: req.user._id,
     content: req.body.content,
     parent: req.body.parent || null,
-    status: 'pending'
+    status: 'approved'
   });
 
   res.status(201).json({

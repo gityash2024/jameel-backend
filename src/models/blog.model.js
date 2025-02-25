@@ -31,11 +31,7 @@ const blogSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Tag'
   }],
-  featuredImage: {
-    public_id: String,
-    url: String,
-    alt: String
-  },
+  featuredImage: [String],
   likes: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'

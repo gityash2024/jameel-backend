@@ -20,17 +20,9 @@ router.get('/:slug/comments', blogController.getPostComments);
 router.use(authenticate);
 
 // Comment routes
-router.post('/:slug/comments', validate({
-  body: {
-    content: 'required|string|max:1000'
-  }
-}), blogController.addComment);
+router.post('/:slug/comments', blogController.addComment);
 
-router.put('/comments/:id', validate({
-  body: {
-    content: 'required|string|max:1000'
-  }
-}), blogController.updateComment);
+router.put('/comments/:id', blogController.updateComment);
 
 router.delete('/comments/:id', blogController.deleteComment);
 
