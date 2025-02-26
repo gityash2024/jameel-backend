@@ -4,7 +4,7 @@ const Product = require('../models/product.model');
 const Variant = require('../models/variant.model');
 const Coupon = require('../models/coupon.model');
 const Inventory = require('../models/inventory.model');
-const AppError = require('../utils/appError');
+const {AppError} = require('../utils/appError');
 const {catchAsync} = require('../utils/appError');
 
 exports.getCart = catchAsync(async (req, res) => {
@@ -55,14 +55,14 @@ exports.addItem = catchAsync(async (req, res, next) => {
   }
 
   // Check inventory
-  const inventoryItem = await Inventory.findOne({
-    product: productId,
-    variant: variantId || null
-  });
+  // const inventoryItem = await Inventory.findOne({
+  //   product: productId,
+  //   variant: variantId || null
+  // });
 
-  if (!inventoryItem || inventoryItem.quantity < quantity) {
-    return next(new AppError('Insufficient inventory', 400));
-  }
+  // if (!inventoryItem || inventoryItem.quantity < quantity) {
+  //   return next(new AppError('Insufficient inventory', 400));
+  // }
 
   // Get or create cart
   let cart = await Cart.findOne({ user: req.user._id });
@@ -123,14 +123,14 @@ exports.updateItem = catchAsync(async (req, res, next) => {
   }
 
   // Check inventory
-  const inventoryItem = await Inventory.findOne({
-    product: cart.items[itemIndex].product,
-    variant: cart.items[itemIndex].variant || null
-  });
+  // const inventoryItem = await Inventory.findOne({
+  //   product: cart.items[itemIndex].product,
+  //   variant: cart.items[itemIndex].variant || null
+  // });
 
-  if (!inventoryItem || inventoryItem.quantity < quantity) {
-    return next(new AppError('Insufficient inventory', 400));
-  }
+  // if (!inventoryItem || inventoryItem.quantity < quantity) {
+  //   return next(new AppError('Insufficient inventory', 400));
+  // }
 
   cart.items[itemIndex].quantity = quantity;
   await cart.save();

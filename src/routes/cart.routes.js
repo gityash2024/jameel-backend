@@ -10,19 +10,9 @@ router.use(authenticate);
 
 // Cart management
 router.get('/', cartController.getCart);
-router.post('/items', validate({
-  body: {
-    productId: 'required|string',
-    variantId: 'string',
-    quantity: 'required|integer|min:1'
-  }
-}), cartController.addItem);
+router.post('/items', cartController.addItem);
 
-router.put('/items/:itemId', validate({
-  body: {
-    quantity: 'required|integer|min:1'
-  }
-}), cartController.updateItem);
+router.put('/items/:itemId', cartController.updateItem);
 
 router.delete('/items/:itemId', cartController.removeItem);
 router.delete('/', cartController.clearCart);
@@ -37,11 +27,7 @@ router.post('/apply-coupon', validate({
 router.delete('/remove-coupon', cartController.removeCoupon);
 
 // Shipping calculations
-router.post('/calculate-shipping', validate({
-  body: {
-    addressId: 'required|string'
-  }
-}), cartController.calculateShipping);
+router.post('/calculate-shipping', cartController.calculateShipping);
 
 // Save for later functionality
 router.post('/items/:itemId/save-for-later', cartController.saveForLater);
