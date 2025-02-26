@@ -36,11 +36,7 @@ router.put('/addresses/:id/default', userController.setDefaultAddress);
 
 // Wishlist management
 router.get('/wishlist', userController.getWishlist);
-router.post('/wishlist', validate({
-  body: {
-    productId: 'required|string'
-  }
-}), userController.addToWishlist);
+router.post('/wishlist', userController.addToWishlist);
 router.delete('/wishlist/:productId', userController.removeFromWishlist);
 
 // Notification preferences

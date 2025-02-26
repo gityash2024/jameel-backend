@@ -246,7 +246,14 @@ exports.setDefaultAddress = catchAsync(async (req, res, next) => {
 
 exports.getWishlist = catchAsync(async (req, res) => {
   const wishlist = await Wishlist.findOne({ user: req.user._id })
-    .populate('products.product', 'name images price');
+    .populate({
+      path: 'products.product',
+      select: 'name slug description images regularPrice salePrice stockQuantity stockStatus brand averageRating numberOfReviews sku isFeatured isNewArrival',
+      populate: [
+        { path: 'category', select: 'name slug' },
+        { path: 'subcategory', select: 'name slug' }
+      ]
+    });
 
   if (!wishlist) {
     return res.status(200).json({
@@ -266,55 +273,93 @@ exports.getWishlist = catchAsync(async (req, res) => {
 });
 
 exports.addToWishlist = catchAsync(async (req, res, next) => {
-  let wishlist = await Wishlist.findOne({ user: req.user._id });
+  const { productId } = req.body;
+  
+  if (!productId) {
+    return next(new AppError('Product ID is required', 400));
+  }
 
+  // Check if product exists
+  const product = await Product.findById(productId);
+  if (!product) {
+    return next(new AppError('Product not found', 404));
+  }
+
+  // Find user's wishlist or create one
+  let wishlist = await Wishlist.findOne({ user: req.user._id });
+  
   if (!wishlist) {
     wishlist = await Wishlist.create({
       user: req.user._id,
-      products: [{ product: req.body.productId }]
+      products: [{ product: productId }]
     });
   } else {
-    const productIndex = wishlist.products.findIndex(
-      (item) => item.product.toString() === req.body.productId
+    // Check if product already in wishlist
+    const isProductInWishlist = wishlist.products.some(item => 
+      item.product.toString() === productId
     );
 
-    if (productIndex > -1) {
-      return next(new AppError('Product already exists in wishlist', 400));
+    if (!isProductInWishlist) {
+      wishlist.products.push({ product: productId });
+      await wishlist.save();
     }
-
-    wishlist.products.push({ product: req.body.productId });
-    await wishlist.save();
   }
 
   res.status(200).json({
     status: 'success',
-    message: 'Product added to wishlist successfully'
+    message: 'Product added to wishlist'
   });
 });
 
 exports.removeFromWishlist = catchAsync(async (req, res, next) => {
+  const productId = req.params.productId;
+  
   const wishlist = await Wishlist.findOne({ user: req.user._id });
-
+  
   if (!wishlist) {
     return next(new AppError('Wishlist not found', 404));
   }
-
-  const productIndex = wishlist.products.findIndex(
-    (item) => item.product.toString() === req.params.productId
+  
+  wishlist.products = wishlist.products.filter(item => 
+    item.product.toString() !== productId
   );
-
-  if (productIndex === -1) {
-    return next(new AppError('Product not found in wishlist', 404));
-  }
-
-  wishlist.products.splice(productIndex, 1);
+  
   await wishlist.save();
-
+  
   res.status(200).json({
     status: 'success',
-    message: 'Product removed from wishlist successfully'
+    message: 'Product removed from wishlist'
   });
 });
+
+exports.getWishlistCount = catchAsync(async (req, res) => {
+  const wishlist = await Wishlist.findOne({ user: req.user._id });
+  
+  const count = wishlist ? wishlist.products.length : 0;
+  
+  res.status(200).json({
+    status: 'success',
+    data: {
+      count
+    }
+  });
+});
+
+exports.clearWishlist = catchAsync(async (req, res) => {
+  const wishlist = await Wishlist.findOne({ user: req.user._id });
+  
+  if (wishlist) {
+    wishlist.products = [];
+    await wishlist.save();
+  }
+  
+  res.status(200).json({
+    status: 'success',
+    message: 'Wishlist cleared'
+  });
+});
+
+
 
 exports.getNotificationPreferences = catchAsync(async (req, res) => {
   const user = await User.findById(req.user._id)
