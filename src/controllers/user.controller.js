@@ -2,6 +2,7 @@
 const User = require('../models/user.model');
 const Address = require('../models/address.model');
 const Wishlist = require('../models/wishlist.model');
+const Product = require('../models/product.model')
 const AppError = require('../utils/appError');
 const {catchAsync} = require('../utils/appError');
 const { uploadToCloudinary } = require('../utils/fileUpload');

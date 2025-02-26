@@ -22,6 +22,8 @@ const couponRoutes = require('./coupon.routes');
 const roleRoutes = require('./role.routes');
 const tagRoutes = require('./tag.routes');
 const subCategoryRoutes = require('./subcategory.routes');
+const helpcenter = require('./helpcenter.routes');
+
 
 
 // Rate limiting setup
@@ -75,6 +77,7 @@ router.use('/coupons', couponRoutes);
 router.use('/roles', roleRoutes);
 router.use('/tags', tagRoutes);
 router.use('/subcategories', subCategoryRoutes);
+router.use('/support-tickets', helpcenter);
 
 
 // Version info endpoint
