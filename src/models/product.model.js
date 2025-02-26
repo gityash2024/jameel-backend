@@ -137,10 +137,6 @@ subcategory: {  // Changed from subCategories array to single subcategory
     type: Number,
     default: 0
   },
-  collections: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Collection'
-  }],
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',

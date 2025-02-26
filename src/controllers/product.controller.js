@@ -114,7 +114,6 @@ exports.getFeaturedProducts = catchAsync(async (req, res) => {
     .populate('category')
   .populate('subcategory')  // Add this line
   .populate('variants')
-  .populate('collections')
   .populate({
     path: 'reviews',
     select: 'rating title content user createdAt',
