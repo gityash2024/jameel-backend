@@ -8,15 +8,41 @@ const storeSchema = new mongoose.Schema({
   },
   branchCode: {
     type: String,
-    required: true,
-    unique: true
+    unique: true,
+    sparse: true,
+    trim: true
   },
   address: {
-    street: String,
-    city: String,
-    state: String,
-    postalCode: String,
-    country: String
+    type: String,
+    required: [true, 'Address is required'],
+    trim: true
+  },
+  city: {
+    type: String,
+    required: [true, 'City is required'],
+    trim: true
+  },
+  state: {
+    type: String,
+    required: [true, 'State is required'],
+    trim: true
+  },
+  zipCode: {
+    type: String,
+    required: [true, 'Zip code is required'],
+    trim: true
+  },
+  phone: {
+    type: String,
+    required: [true, 'Phone number is required']
+  },
+  email: {
+    type: String,
+    required: [true, 'Email is required']
+  },
+  hours: {
+    type: String,
+    required: [true, 'Store hours are required']
   },
   location: {
     type: {
@@ -29,67 +55,32 @@ const storeSchema = new mongoose.Schema({
       required: true
     }
   },
-  contactInfo: {
-    phone: String,
-    email: String,
-    website: String
+  isActive: {
+    type: Boolean,
+    default: true
   },
-  operatingHours: [{
-    day: {
-      type: String,
-      enum: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-    },
-    open: String,
-    close: String,
-    isOpen: {
-      type: Boolean,
-      default: true
-    }
-  }],
-  services: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Service'
-  }],
-  staff: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
-  }],
-  manager: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
+  image: {
+    type: String
   },
-  images: [{
-    public_id: String,
-    url: String
-  }],
+  rating: {
+    type: Number,
+    min: 0,
+    max: 5,
+    default: 4.5
+  },
+  reviews: {
+    type: Number,
+    default: 0
+  },
   features: [{
     type: String,
-    enum: ['parking', 'wifi', 'handicap_accessible', 'appointment_only']
-  }],
-  status: {
-    type: String,
-    enum: ['active', 'inactive', 'temporarily_closed', 'permanently_closed'],
-    default: 'active'
-  },
-  ratings: {
-    average: {
-      type: Number,
-      default: 0
-    },
-    count: {
-      type: Number,
-      default: 0
-    }
-  },
-  inventory: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Inventory'
-  }
+    enum: ['Parking', 'Wheelchair Access', 'Private Viewing Room', 'Custom Design', 'Repairs']
+  }]
 }, {
   timestamps: true
 });
 
-// Index for geospatial queries
+// Create a 2dsphere index for geospatial queries
 storeSchema.index({ location: '2dsphere' });
 
 const Store = mongoose.model('Store', storeSchema);
