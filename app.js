@@ -21,7 +21,7 @@ console.log(chalk.green('Current environment:'), process.env.NODE_ENV);
 // Middleware
 app.use(helmet());
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || '*',
+  origin: ['http://localhost:5173', 'http://localhost:5174','https://jameel-web.vercel.app','https://jameel-admin.vercel.app'] || '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
