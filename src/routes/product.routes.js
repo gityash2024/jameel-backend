@@ -9,13 +9,13 @@ const {cache} = require('../middleware/cache.middleware');
 
 // Public routes
 router.get('/', cache('5 minutes'), productController.getAllProducts);
+router.get('/web', cache('5 minutes'), productController.getWebProducts);
 router.get('/featured', cache('10 minutes'), productController.getFeaturedProducts);
 router.get('/new-arrivals', cache('10 minutes'), productController.getNewArrivals);
 router.get('/:slug', cache('5 minutes'), productController.getProductBySlug);
 router.get('/category/:categorySlug', cache('5 minutes'), productController.getProductsByCategory);
 router.get('/search', productController.searchProducts);
 router.get('/id/:id', cache('5 minutes'), productController.getProduct);
-
 router.use(authenticate);
 
 router.post('/:id/reviews', validate(productValidator.createReview), productController.createProductReview);

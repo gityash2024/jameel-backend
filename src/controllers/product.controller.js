@@ -28,7 +28,53 @@ exports.uploadProductImages = catchAsync(async (req, res, next) => {
   req.body.images = await Promise.all(uploadPromises);
   next();
 });
+// In src/controllers/product.controller.js modify getWebProducts:
 
+exports.getWebProducts = catchAsync(async (req, res) => {
+  // Default to 9 products per page for web frontend
+  const defaultLimit = 9;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || defaultLimit;
+  
+  // Build the query based on filters
+  let query = Product.find();
+  
+  // Handle subcategory filter specifically
+  if (req.query.subcategory) {
+    query = query.find({ subcategory: req.query.subcategory });
+  }
+  
+  const features = new APIFeatures(
+    query,
+    req.query
+  )
+    .filter()
+    .sort()
+    .limitFields()
+    .paginate()
+    .search(['name', 'description', 'brand']);
+
+  const products = await features.query
+    .populate('category')
+    .populate('subcategory')
+    .populate('variants');
+
+  // Count total documents based on filter
+  let countQuery = Product.find();
+  if (req.query.subcategory) {
+    countQuery = countQuery.find({ subcategory: req.query.subcategory });
+  }
+  const total = await countQuery.countDocuments();
+
+  res.status(200).json({
+    status: 'success',
+    results: products.length,
+    total,
+    data: {
+      products
+    }
+  });
+});
 exports.getAllProducts = catchAsync(async (req, res) => {
   const features = new APIFeatures(
     Product.find(),
