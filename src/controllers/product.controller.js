@@ -138,6 +138,35 @@ exports.getFeaturedProducts = catchAsync(async (req, res) => {
       }
     });
   });
+  exports.getProduct = catchAsync(async (req, res, next) => {
+    const product = await Product.findById(req.params.id)
+      .populate('category')
+      .populate('subcategory')
+      .populate('variants')
+      .populate({
+        path: 'reviews',
+        select: 'rating title content user createdAt',
+        populate: {
+          path: 'user',
+          select: 'firstName lastName avatar'
+        }
+      });
+  
+    if (!product) {
+      return next(new AppError('Product not found', 404));
+    }
+  
+    // Update view count
+    product.viewCount = (product.viewCount || 0) + 1;
+    await product.save({ validateBeforeSave: false });
+  
+    res.status(200).json({
+      status: 'success',
+      data: {
+        product
+      }
+    });
+  });
   
   exports.getProductsByCategory = catchAsync(async (req, res, next) => {
     const category = await Category.findOne({ slug: req.params.categorySlug });

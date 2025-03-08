@@ -14,8 +14,8 @@ router.get('/new-arrivals', cache('10 minutes'), productController.getNewArrival
 router.get('/:slug', cache('5 minutes'), productController.getProductBySlug);
 router.get('/category/:categorySlug', cache('5 minutes'), productController.getProductsByCategory);
 router.get('/search', productController.searchProducts);
+router.get('/id/:id', cache('5 minutes'), productController.getProduct);
 
-// Protected routes for regular users
 router.use(authenticate);
 
 router.post('/:id/reviews', validate(productValidator.createReview), productController.createProductReview);
