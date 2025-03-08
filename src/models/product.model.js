@@ -75,12 +75,7 @@ subcategory: {  // Changed from subCategories array to single subcategory
     enum: ['in_stock', 'out_of_stock', 'on_backorder'],
     default: 'in_stock'
   },
-  images: [{
-    public_id: String,
-    url: String,
-    alt: String,
-    isPrimary: Boolean
-  }],
+  images: [],
   attributes: [{
     name: String,
     value: String
