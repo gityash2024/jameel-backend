@@ -30,18 +30,6 @@ exports.uploadProductImages = catchAsync(async (req, res, next) => {
 });
 
 exports.getAllProducts = catchAsync(async (req, res) => {
-  const countQuery = new APIFeatures(
-    Product.find(),
-    req.query
-  )
-    .filter()
-    .search(['name', 'description', 'brand', 'sku'])
-    .query;
-
-  // Get total matching documents for pagination
-  const total = await Product.countDocuments(countQuery.getFilter());
-
-  // Apply all transformations including pagination
   const features = new APIFeatures(
     Product.find(),
     req.query
@@ -50,12 +38,14 @@ exports.getAllProducts = catchAsync(async (req, res) => {
     .sort()
     .limitFields()
     .paginate()
-    .search(['name', 'description', 'brand', 'sku']);
+    .search(['name', 'description', 'brand']);
 
   const products = await features.query
-    .populate('category')
-    .populate('subcategory')
-    .populate('variants');
+  .populate('category')
+  .populate('subcategory')  // Add this line
+  .populate('variants');
+
+  const total = await Product.countDocuments();
 
   res.status(200).json({
     status: 'success',
@@ -67,7 +57,7 @@ exports.getAllProducts = catchAsync(async (req, res) => {
   });
 });
 
-
+// Continuing from previous implementation...
 
 exports.getFeaturedProducts = catchAsync(async (req, res) => {
     const products = await Product.find({ isFeatured: true, isActive: true })
