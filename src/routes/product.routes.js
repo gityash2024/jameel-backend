@@ -7,15 +7,19 @@ const productValidator = require('../validators/product.validator');
 const productController = require('../controllers/product.controller');
 const {cache} = require('../middleware/cache.middleware');
 
-// Public routes
-router.get('/', cache('5 minutes'), productController.getAllProducts);
+// Public routes - specific routes first
+router.get('/suggestions', productController.getProductSuggestions);
+router.get('/featured', cache('5 minutes'), productController.getFeaturedProducts);
+router.get('/new-arrivals', cache('5 minutes'), productController.getNewArrivals);
 router.get('/web', cache('5 minutes'), productController.getWebProducts);
-router.get('/featured', cache('10 minutes'), productController.getFeaturedProducts);
-router.get('/new-arrivals', cache('10 minutes'), productController.getNewArrivals);
-router.get('/:slug', cache('5 minutes'), productController.getProductBySlug);
-router.get('/category/:categorySlug', cache('5 minutes'), productController.getProductsByCategory);
 router.get('/search', productController.searchProducts);
-router.get('/id/:id', cache('5 minutes'), productController.getProduct);
+router.get('/id/:id', cache('5 minutes'), productController.getProductById);
+router.get('/category/:slug', cache('5 minutes'), productController.getProductsByCategory);
+
+// General routes
+router.get('/', cache('5 minutes'), productController.getAllProducts);
+router.get('/:slug', cache('5 minutes'), productController.getProductBySlug);
+
 router.use(authenticate);
 
 router.post('/:id/reviews', validate(productValidator.createReview), productController.createProductReview);

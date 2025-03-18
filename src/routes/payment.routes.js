@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const { authenticate, authorize } = require('../middleware/auth.middleware');
-const {validate} = require('../middleware/validate.middleware');
+const { validate } = require('../middleware/validate.middleware');
 const paymentController = require('../controllers/payment.controller');
 
 // Middleware for Stripe webhook
@@ -90,6 +90,11 @@ router.post('/layaway', validate({
 router.get('/layaway/:id', paymentController.getLayawayDetails);
 router.post('/layaway/:id/payment', paymentController.processLayawayPayment);
 
+// Payment information
+router.get('/', paymentController.getPayments);
+router.get('/:id', paymentController.getPayment);
+router.get('/:id/invoice', paymentController.getInvoice);
+
 // Admin only routes
 router.use(authorize(['admin']));
 
@@ -124,5 +129,8 @@ router.put('/settings', validate({
 
 // Export functionality
 router.get('/export/transactions', paymentController.exportTransactions);
+
+// Add the payment intent route
+router.post('/create-payment-intent', paymentController.createPaymentIntentForOrder);
 
 module.exports = router;

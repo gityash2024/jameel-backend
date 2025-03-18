@@ -8,29 +8,55 @@ const { createPaymentIntent } = require('../services/payment.service');
 const { sendEmail } = require('../services/email.service');
 const { sendSms } = require('../services/sms.service');
 const { createNotification } = require('../services/notification.service');
-const AppError = require('../utils/appError');
-const {catchAsync} = require('../utils/appError');
+const { AppError, catchAsync } = require('../utils/appError');
 const APIFeatures = require('../utils/apiFeatures');
+const axios = require('axios');
 
 exports.createOrder = catchAsync(async (req, res, next) => {
-  // Get cart details
-  const cart = await Cart.findOne({ user: req.user._id })
-    .populate('items.product')
-    .populate('items.variant');
+  let cartItems = [];
+  let orderTotal = 0;
+  
+  // Check if order items are provided directly in the request
+  if (req.body.items && Array.isArray(req.body.items) && req.body.items.length > 0) {
+    console.log('Creating order from request body items:', req.body.items);
+    
+    // Process items from request
+    cartItems = req.body.items;
+    orderTotal = req.body.total || 0;
+  } else {
+    // Get cart details
+    const cart = await Cart.findOne({ user: req.user._id })
+      .populate('items.product')
+      .populate('items.variant');
 
-  if (!cart || cart.items.length === 0) {
-    return next(new AppError('Cart is empty', 400));
+    if (!cart || cart.items.length === 0) {
+      return next(new AppError('Cart is empty', 400));
+    }
+    
+    cartItems = cart.items;
+    orderTotal = cart.total || req.body.total || 0;
+    
+    // Clear cart after successful order creation
+    cart.items = [];
+    cart.couponCode = null;
+    cart.discount = 0;
+    await cart.save();
   }
 
   // Validate inventory
-  for (const item of cart.items) {
+  for (const item of cartItems) {
+    if (!item.product || !item.product._id) {
+      continue; // Skip if product is not available
+    }
+    
     const inventory = await Inventory.findOne({
-      product: item.product._id,
+      product: typeof item.product === 'object' ? item.product._id : item.product,
       variant: item.variant?._id || null
     });
 
     if (!inventory || inventory.quantity < item.quantity) {
-      return next(new AppError(`Insufficient inventory for ${item.product.name}`, 400));
+      const productName = typeof item.product === 'object' ? item.product.name : 'Product';
+      return next(new AppError(`Insufficient inventory for ${productName}`, 400));
     }
   }
 
@@ -38,30 +64,40 @@ exports.createOrder = catchAsync(async (req, res, next) => {
   const orderNumber = await generateOrderNumber();
 
   // Create order
-  const order = await Order.create({
-    orderNumber,
-    user: req.user._id,
-    items: cart.items,
-    shippingAddress: req.body.shippingAddress,
-    billingAddress: req.body.billingAddress || req.body.shippingAddress,
-    paymentMethod: req.body.paymentMethod,
-    shippingMethod: req.body.shippingMethod,
-    subTotal: cart.subTotal,
-    tax: cart.tax,
-    shippingCost: cart.shippingCost,
-    discount: cart.discount,
-    total: cart.total,
-    couponCode: cart.couponCode,
-    notes: req.body.notes,
-    isGift: req.body.isGift,
-    giftMessage: req.body.giftMessage
-  });
+  let order;
+  try {
+    order = await Order.create({
+      orderNumber,
+      user: req.user._id,
+      items: cartItems,
+      shippingAddress: req.body.shippingAddress,
+      billingAddress: req.body.billingAddress || req.body.shippingAddress,
+      paymentMethod: req.body.paymentMethod,
+      shippingMethod: req.body.shippingMethod,
+      subTotal: req.body.subtotal || orderTotal,
+      tax: req.body.tax || 0,
+      shippingCost: req.body.shippingCost || 0,
+      discount: req.body.discount || 0,
+      total: orderTotal,
+      couponCode: req.body.couponCode,
+      notes: req.body.notes,
+      isGift: req.body.isGift,
+      giftMessage: req.body.giftMessage
+    });
+  } catch (error) {
+    console.error('Error creating order:', error);
+    return next(new AppError('Failed to create order', 500));
+  }
 
   // Update inventory
-  for (const item of cart.items) {
+  for (const item of cartItems) {
+    if (!item.product || !item.product._id) {
+      continue; // Skip if product is not available
+    }
+    
     await Inventory.findOneAndUpdate(
       {
-        product: item.product._id,
+        product: typeof item.product === 'object' ? item.product._id : item.product,
         variant: item.variant?._id || null
       },
       {
@@ -70,38 +106,84 @@ exports.createOrder = catchAsync(async (req, res, next) => {
     );
 
     // Update product sales count
-    await Product.findByIdAndUpdate(item.product._id, {
+    const productId = typeof item.product === 'object' ? item.product._id : item.product;
+    await Product.findByIdAndUpdate(productId, {
       $inc: { salesCount: item.quantity }
     });
   }
 
   // Create payment intent if needed
+  let paymentIntent = null;
   if (req.body.paymentMethod !== 'cash_on_delivery') {
-    const paymentIntent = await createPaymentIntent(order.total, 'usd', {
-      orderId: order._id.toString()
-    });
-
-    order.paymentIntentId = paymentIntent.id;
-    await order.save();
+    try {
+      // Create a payment intent with properly formatted metadata
+      paymentIntent = await createPaymentIntent(
+        Math.round(order.total * 100), // Amount in cents
+        'usd',
+        { orderId: order._id.toString() }
+      );
+      
+      if (paymentIntent && paymentIntent.id) {
+        order.paymentIntentId = paymentIntent.id;
+        await order.save();
+      }
+    } catch (error) {
+      console.error('Error creating payment intent:', error);
+      // Don't fail the entire order creation if payment intent fails
+    }
   }
 
-  // Clear cart
-  cart.items = [];
-  cart.couponCode = null;
-  cart.discount = 0;
-  await cart.save();
+  // Handle coupon code if provided
+  if (req.body.couponCode) {
+    try {
+      const couponResponse = await axios.post(`${process.env.BASE_URL}/api/v1/coupons/validate`, {
+        code: req.body.couponCode,
+        amount: order.subTotal
+      });
+      
+      if (couponResponse.data && couponResponse.data.status === 'success') {
+        const { coupon, discount } = couponResponse.data.data;
+        
+        // Apply discount
+        order.discount = discount;
+        order.coupon = {
+          code: coupon.code,
+          value: coupon.value,
+          type: coupon.type,
+          _id: coupon._id
+        };
+        
+        // Increment coupon usage after successful order creation
+        await axios.post(`${process.env.BASE_URL}/api/v1/coupons/increment-usage`, {
+          code: coupon.code
+        });
+      }
+    } catch (err) {
+      console.error('Error applying coupon:', err.message);
+      // Don't fail the order creation if coupon application fails
+    }
+  }
+
+  // Calculate the final total AFTER any potential discount
+  order.total = order.subTotal + order.tax + order.shippingCost - order.discount;
 
   // Send notifications
-  await sendOrderConfirmationNotifications(order);
+  try {
+    await sendOrderConfirmationNotifications(order);
+  } catch (error) {
+    console.error('Error sending order notifications:', error);
+    // Continue with order creation even if notifications fail
+  }
 
   res.status(201).json({
     status: 'success',
     data: {
       order,
-      clientSecret: paymentIntent?.client_secret
+      clientSecret: paymentIntent ? paymentIntent.client_secret : null
     }
   });
 });
+
 exports.deleteOrder = catchAsync(async (req, res, next) => {
   const order = await Order.findById(req.params.id);
 
@@ -170,6 +252,7 @@ exports.updateRefundStatus = catchAsync(async (req, res, next) => {
     }
   });
 });
+
 exports.getMyOrders = catchAsync(async (req, res) => {
   const features = new APIFeatures(
     Order.find({ user: req.user._id }),
@@ -192,6 +275,7 @@ exports.getMyOrders = catchAsync(async (req, res) => {
     }
   });
 });
+
 exports.verifyPayment = catchAsync(async (req, res, next) => {
   const order = await Order.findById(req.params.id);
 
@@ -216,6 +300,7 @@ exports.verifyPayment = catchAsync(async (req, res, next) => {
     }
   });
 });
+
 exports.getMyOrderById = catchAsync(async (req, res, next) => {
   const order = await Order.findOne({
     _id: req.params.id,
@@ -633,91 +718,145 @@ exports.getSalesAnalytics = catchAsync(async (req, res) => {
   };
   
   const sendOrderConfirmationNotifications = async (order) => {
-    // Send email notification
-    await sendEmail(
-      order.user.email,
-      'Order Confirmation',
-      'order-confirmation',
-      {
-        order,
-        user: order.user
+    try {
+      // Skip email if user email isn't available
+      if (order.user && order.user.email) {
+        // Send email notification
+        await sendEmail(
+          order.user.email,
+          'Order Confirmation',
+          'order-confirmation',
+          {
+            order,
+            user: order.user
+          }
+        );
       }
-    );
-  
-    // Send SMS if phone number exists
-    if (order.user.phone) {
-      await sendSms(
-        order.user.phone,
-        `Your order #${order.orderNumber} has been confirmed. Thank you for shopping with us!`
-      );
+    
+      // Send SMS if phone number exists
+      if (order.user && order.user.phone) {
+        try {
+          await sendSms(
+            order.user.phone,
+            `Your order #${order.orderNumber} has been confirmed. Thank you for shopping with us!`
+          );
+        } catch (error) {
+          console.error('Error sending SMS:', error);
+          // Continue execution even if SMS fails
+        }
+      }
+    
+      // Create in-app notification
+      if (order.user && order.user._id) {
+        try {
+          await createNotification(
+            order.user._id,
+            'order',
+            'Order Confirmation',
+            `Your order #${order.orderNumber} has been confirmed`
+          );
+        } catch (error) {
+          console.error('Error creating notification:', error);
+          // Continue execution even if notification fails
+        }
+      }
+    } catch (error) {
+      console.error('Error sending order notifications:', error);
+      // Notifications shouldn't block order creation
     }
-  
-    // Create in-app notification
-    await createNotification(
-      order.user._id,
-      'order',
-      'Order Confirmation',
-      `Your order #${order.orderNumber} has been confirmed`
-    );
   };
   
   const sendOrderCancellationNotifications = async (order) => {
-    // Send email notification
-    await sendEmail(
-      order.user.email,
-      'Order Cancelled',
-      'order-cancellation',
-      {
-        order,
-        user: order.user
+    try {
+      // Skip email if user email isn't available
+      if (order.user && order.user.email) {
+        // Send email notification
+        await sendEmail(
+          order.user.email,
+          'Order Cancelled',
+          'order-cancellation',
+          {
+            order,
+            user: order.user
+          }
+        );
       }
-    );
-  
-    // Send SMS if phone number exists
-    if (order.user.phone) {
-      await sendSms(
-        order.user.phone,
-        `Your order #${order.orderNumber} has been cancelled`
-      );
+    
+      // Send SMS if phone number exists
+      if (order.user && order.user.phone) {
+        try {
+          await sendSms(
+            order.user.phone,
+            `Your order #${order.orderNumber} has been cancelled`
+          );
+        } catch (error) {
+          console.error('Error sending cancellation SMS:', error);
+        }
+      }
+    
+      // Create in-app notification
+      if (order.user && order.user._id) {
+        try {
+          await createNotification(
+            order.user._id,
+            'order',
+            'Order Cancelled',
+            `Your order #${order.orderNumber} has been cancelled`
+          );
+        } catch (error) {
+          console.error('Error creating cancellation notification:', error);
+        }
+      }
+    } catch (error) {
+      console.error('Error sending cancellation notifications:', error);
     }
-  
-    // Create in-app notification
-    await createNotification(
-      order.user._id,
-      'order',
-      'Order Cancelled',
-      `Your order #${order.orderNumber} has been cancelled`
-    );
   };
   
   const sendShippingNotifications = async (order) => {
-    // Send email notification
-    await sendEmail(
-      order.user.email,
-      'Order Shipped',
-      'order-shipped',
-      {
-        order,
-        user: order.user,
-        trackingUrl: generateTrackingUrl(order.trackingNumber)
+    try {
+      // Skip email if user email isn't available
+      if (order.user && order.user.email) {
+        // Send email notification
+        await sendEmail(
+          order.user.email,
+          'Order Shipped',
+          'order-shipped',
+          {
+            order,
+            user: order.user,
+            trackingUrl: generateTrackingUrl(order.trackingNumber)
+          }
+        );
       }
-    );
-  
-    // Send SMS if phone number exists
-    if (order.user.phone) {
-      await sendSms(
-        order.user.phone,
-        `Your order #${order.orderNumber} has been shipped. Track your package: ${generateTrackingUrl(order.trackingNumber)}`
-      );
+    
+      // Send SMS if phone number exists
+      if (order.user && order.user.phone) {
+        try {
+          await sendSms(
+            order.user.phone,
+            `Your order #${order.orderNumber} has been shipped. Track your package: ${generateTrackingUrl(order.trackingNumber)}`
+          );
+        } catch (error) {
+          console.error('Error sending shipping SMS:', error);
+        }
+      }
+    
+      // Create in-app notification
+      if (order.user && order.user._id) {
+        try {
+          await createNotification(
+            order.user._id,
+            'order',
+            'Order Shipped',
+            `Your order #${order.orderNumber} has been shipped`
+          );
+        } catch (error) {
+          console.error('Error creating shipping notification:', error);
+        }
+      }
+    } catch (error) {
+      console.error('Error sending shipping notifications:', error);
     }
-  
-    // Create in-app notification
-    await createNotification(
-      order.user._id,
-      'order',
-      'Order Shipped',
-      `Your order #${order.orderNumber} has been shipped`
-    );
   };
   
   const processRefund = async (order, amount = null, reason = '') => {

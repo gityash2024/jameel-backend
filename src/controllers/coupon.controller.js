@@ -7,44 +7,39 @@ const {catchAsync} = require('../utils/appError');
 const APIFeatures = require('../utils/apiFeatures');
 
 exports.validateCoupon = catchAsync(async (req, res, next) => {
-  const { code, cartTotal } = req.body;
+  const { code, amount } = req.body;
 
-  const coupon = await Coupon.findOne({
+  if (!code) {
+    return next(new AppError('Coupon code is required', 400));
+  }
+
+  const coupon = await Coupon.findOne({ 
     code: code.toUpperCase(),
     isActive: true,
-    startDate: { $lte: new Date() },
-    endDate: { $gte: new Date() }
+    endDate: { $gte: new Date() },
+    startDate: { $lte: new Date() }
   });
 
   if (!coupon) {
-    return next(new AppError('Invalid or expired coupon', 400));
+    return next(new AppError('Invalid or expired coupon code', 400));
   }
 
-  // Check minimum purchase requirement
-  if (coupon.minPurchase && cartTotal < coupon.minPurchase) {
-    return next(new AppError(`Minimum purchase amount of ${coupon.minPurchase} required`, 400));
+  // Check usage limit
+  if (coupon.usageLimit !== null && coupon.usedCount >= coupon.usageLimit) {
+    return next(new AppError('This coupon has reached its usage limit', 400));
   }
 
-  // Check usage limits
-  if (coupon.usageLimit.perCoupon && coupon.usageCount >= coupon.usageLimit.perCoupon) {
-    return next(new AppError('Coupon usage limit reached', 400));
-  }
-
-  if (req.user) {
-    const userUsage = await Order.countDocuments({
-      user: req.user._id,
-      couponCode: code.toUpperCase()
-    });
-
-    if (coupon.usageLimit.perUser && userUsage >= coupon.usageLimit.perUser) {
-      return next(new AppError('You have reached the usage limit for this coupon', 400));
-    }
+  // Check minimum order amount
+  if (amount && coupon.minOrderAmount > 0 && amount < coupon.minOrderAmount) {
+    return next(new AppError(`This coupon requires a minimum order of $${coupon.minOrderAmount}`, 400));
   }
 
   // Calculate discount
   let discount = 0;
   if (coupon.type === 'percentage') {
-    discount = (cartTotal * coupon.value) / 100;
+    discount = amount ? (amount * coupon.value / 100) : coupon.value;
+    
+    // Apply max discount if specified
     if (coupon.maxDiscount && discount > coupon.maxDiscount) {
       discount = coupon.maxDiscount;
     }
@@ -56,7 +51,9 @@ exports.validateCoupon = catchAsync(async (req, res, next) => {
     status: 'success',
     data: {
       coupon,
-      discount
+      discount: amount ? discount : null,
+      discountValue: coupon.value,
+      discountType: coupon.type
     }
   });
 });
@@ -77,12 +74,7 @@ exports.getMyCoupons = catchAsync(async (req, res) => {
 });
 
 exports.applyCoupon = catchAsync(async (req, res, next) => {
-  const { code, cartId } = req.body;
-
-  const cart = await Cart.findById(cartId);
-  if (!cart) {
-    return next(new AppError('Cart not found', 404));
-  }
+  const { code } = req.body;
 
   const coupon = await Coupon.findOne({
     code: code.toUpperCase(),
@@ -95,68 +87,50 @@ exports.applyCoupon = catchAsync(async (req, res, next) => {
     return next(new AppError('Invalid or expired coupon', 400));
   }
 
-  // Validate product restrictions
-  if (coupon.applicableProducts?.length > 0) {
-    const hasValidProduct = cart.items.some(item => 
-      coupon.applicableProducts.includes(item.product.toString())
-    );
-    if (!hasValidProduct) {
-      return next(new AppError('Coupon not applicable to any items in cart', 400));
-    }
+  // Check usage limit
+  if (coupon.usageLimit !== null && coupon.usedCount >= coupon.usageLimit) {
+    return next(new AppError('This coupon has reached its usage limit', 400));
   }
-
-  // Validate category restrictions
-  if (coupon.applicableCategories?.length > 0) {
-    const cartProducts = await Product.find({
-      _id: { $in: cart.items.map(item => item.product) }
-    });
-    
-    const hasValidCategory = cartProducts.some(product => 
-      coupon.applicableCategories.includes(product.category.toString())
-    );
-    if (!hasValidCategory) {
-      return next(new AppError('Coupon not applicable to any items in cart', 400));
-    }
-  }
-
-  cart.couponCode = code.toUpperCase();
-  await cart.save();
 
   res.status(200).json({
     status: 'success',
     data: {
-      cart
+      coupon,
+      discountType: coupon.type,
+      discountValue: coupon.value,
+      maxDiscount: coupon.maxDiscount
     }
   });
 });
 
 // Admin Routes
 
-exports.getAllCoupons = catchAsync(async (req, res) => {
-  const features = new APIFeatures(Coupon.find(), req.query)
-    .filter()
-    .sort()
-    .limitFields()
-    .paginate();
+exports.getAllCoupons = catchAsync(async (req, res, next) => {
+  // Build filter
+  let filter = {};
+  
+  // For active coupons only
+  if (req.query.active === 'true') {
+    filter.isActive = true;
+    filter.endDate = { $gte: new Date() };
+  }
 
-  const coupons = await features.query;
-  const total = await Coupon.countDocuments();
+  const coupons = await Coupon.find(filter);
 
   res.status(200).json({
     status: 'success',
     results: coupons.length,
-    total,
     data: {
       coupons
     }
   });
 });
 
-exports.getCouponById = catchAsync(async (req, res, next) => {
+exports.getCoupon = catchAsync(async (req, res, next) => {
   const coupon = await Coupon.findById(req.params.id);
 
   if (!coupon) {
-    return next(new AppError('Coupon not found', 404));
+    return next(new AppError('No coupon found with that ID', 404));
   }
 
   res.status(200).json({
@@ -167,19 +141,12 @@ exports.getCouponById = catchAsync(async (req, res, next) => {
   });
 });
 
-exports.createCoupon = catchAsync(async (req, res) => {
-  // Generate unique code if not provided
-  if (!req.body.code) {
-    req.body.code = generateCouponCode();
-  }
-
-  const coupon = await Coupon.create({
-    ...req.body,
-    createdBy: req.user._id
-  });
+exports.createCoupon = catchAsync(async (req, res, next) => {
+  const coupon = await Coupon.create(req.body);
 
   res.status(201).json({
     status: 'success',
+    message: 'Coupon created successfully',
     data: {
       coupon
     }
@@ -187,17 +154,18 @@ exports.createCoupon = catchAsync(async (req, res) => {
 });
 
 exports.updateCoupon = catchAsync(async (req, res, next) => {
-  const coupon = await Coupon.findById(req.params.id);
+  const coupon = await Coupon.findByIdAndUpdate(req.params.id, req.body, {
+    new: true,
+    runValidators: true
+  });
 
   if (!coupon) {
-    return next(new AppError('Coupon not found', 404));
+    return next(new AppError('No coupon found with that ID', 404));
   }
-
-  Object.assign(coupon, req.body);
-  await coupon.save();
 
   res.status(200).json({
     status: 'success',
+    message: 'Coupon updated successfully',
     data: {
       coupon
     }
@@ -205,13 +173,11 @@ exports.updateCoupon = catchAsync(async (req, res, next) => {
 });
 
 exports.deleteCoupon = catchAsync(async (req, res, next) => {
-  const coupon = await Coupon.findById(req.params.id);
+  const coupon = await Coupon.findByIdAndDelete(req.params.id);
 
   if (!coupon) {
-    return next(new AppError('Coupon not found', 404));
+    return next(new AppError('No coupon found with that ID', 404));
   }
-
-  await coupon.deleteOne();
 
   res.status(204).json({
     status: 'success',
@@ -264,18 +230,44 @@ exports.bulkDeleteCoupons = catchAsync(async (req, res) => {
   });
 });
 
-exports.updateCouponStatus = catchAsync(async (req, res, next) => {
+exports.toggleCouponStatus = catchAsync(async (req, res, next) => {
   const coupon = await Coupon.findById(req.params.id);
 
   if (!coupon) {
-    return next(new AppError('Coupon not found', 404));
+    return next(new AppError('No coupon found with that ID', 404));
   }
 
-  coupon.isActive = req.body.isActive;
+  coupon.isActive = !coupon.isActive;
   await coupon.save();
 
   res.status(200).json({
     status: 'success',
+    message: `Coupon status ${coupon.isActive ? 'activated' : 'deactivated'} successfully`,
+    data: {
+      coupon
+    }
+  });
+});
+
+exports.incrementCouponUsage = catchAsync(async (req, res, next) => {
+  const { code } = req.body;
+
+  if (!code) {
+    return next(new AppError('Coupon code is required', 400));
+  }
+
+  const coupon = await Coupon.findOne({ code: code.toUpperCase() });
+
+  if (!coupon) {
+    return next(new AppError('No coupon found with that code', 404));
+  }
+
+  coupon.usedCount += 1;
+  await coupon.save();
+
+  res.status(200).json({
+    status: 'success',
+    message: 'Coupon usage incremented successfully',
     data: {
       coupon
     }
@@ -390,6 +382,32 @@ exports.exportCoupons = catchAsync(async (req, res) => {
 
   res.attachment('coupons.csv');
   res.status(200).send(csv);
+});
+
+exports.updateCouponStatus = catchAsync(async (req, res, next) => {
+  const { isActive } = req.body;
+  
+  if (typeof isActive !== 'boolean') {
+    return next(new AppError('isActive must be a boolean value', 400));
+  }
+
+  const coupon = await Coupon.findByIdAndUpdate(
+    req.params.id, 
+    { isActive },
+    { new: true, runValidators: true }
+  );
+
+  if (!coupon) {
+    return next(new AppError('No coupon found with that ID', 404));
+  }
+
+  res.status(200).json({
+    status: 'success',
+    message: `Coupon ${isActive ? 'activated' : 'deactivated'} successfully`,
+    data: {
+      coupon
+    }
+  });
 });
 
 // Helper Functions

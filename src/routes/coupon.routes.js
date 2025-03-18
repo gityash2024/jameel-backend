@@ -4,14 +4,11 @@ const router = express.Router();
 const { authenticate, authorize } = require('../middleware/auth.middleware');
 const {validate} = require('../middleware/validate.middleware');
 const couponController = require('../controllers/coupon.controller');
+const authController = require('../controllers/auth.controller');
 
 // Public routes
-router.post('/validate', validate({
-  body: {
-    code: 'required|string',
-    cartTotal: 'required|number'
-  }
-}), couponController.validateCoupon);
+router.post('/validate', couponController.validateCoupon);
+router.post('/increment-usage', couponController.incrementCouponUsage);
 
 // Routes requiring authentication
 router.use(authenticate);
@@ -20,57 +17,25 @@ router.use(authenticate);
 router.get('/my-coupons', couponController.getMyCoupons);
 router.post('/apply', validate({
   body: {
-    code: 'required|string',
-    cartId: 'required|string'
+    code: 'required|string'
   }
 }), couponController.applyCoupon);
 
 // Admin routes
 router.use(authorize(['admin']));
 
-router.get('/', couponController.getAllCoupons);
-router.get('/:id', couponController.getCouponById);
+router
+  .route('/')
+  .get(couponController.getAllCoupons)
+  .post(couponController.createCoupon);
 
-router.post('/', validate({
-  body: {
-    code: 'required|string',
-    type: 'required|string|in:percentage,fixed,free_shipping',
-    value: 'required|number',
-    minPurchase: 'number',
-    maxDiscount: 'number',
-    startDate: 'required|date',
-    endDate: 'required|date',
-    usageLimit: {
-      perCoupon: 'integer',
-      perUser: 'integer'
-    },
-    applicableProducts: 'array',
-    excludedProducts: 'array',
-    applicableCategories: 'array',
-    description: 'string',
-    terms: 'array'
-  }
-}), couponController.createCoupon);
+router
+  .route('/:id')
+  .get(couponController.getCoupon)
+  .patch(couponController.updateCoupon)
+  .delete(couponController.deleteCoupon);
 
-router.put('/:id', validate({
-  body: {
-    code: 'string',
-    type: 'string|in:percentage,fixed,free_shipping',
-    value: 'number',
-    minPurchase: 'number',
-    maxDiscount: 'number',
-    startDate: 'date',
-    endDate: 'date',
-    usageLimit: 'object',
-    applicableProducts: 'array',
-    excludedProducts: 'array',
-    applicableCategories: 'array',
-    description: 'string',
-    terms: 'array'
-  }
-}), couponController.updateCoupon);
-
-router.delete('/:id', couponController.deleteCoupon);
+router.patch('/:id/toggle-status', couponController.toggleCouponStatus);
 
 // Bulk operations
 router.post('/bulk/create', validate({

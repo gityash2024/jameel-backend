@@ -596,3 +596,98 @@ exports.getFeaturedProducts = catchAsync(async (req, res) => {
       data: null
     });
   });
+
+exports.getProductSuggestions = catchAsync(async (req, res) => {
+  let query = req.query.query;
+  console.log(query,'query-______-----____-----____----___---');
+  
+  if (!query || query.length < 2) {
+    return res.status(200).json({
+      status: 'success',
+      results: 0,
+      data: {
+        products: []
+      }
+    });
+  }
+  
+  // Normalize the query
+  query = query.trim();
+  console.log(query,'query-______-----____-----____----___---');
+  
+  try {
+    // Break down the query into potentially relevant terms
+    // This helps match jewelry products with karat, material, and size terms
+    const terms = query.split(/\s+/);
+    
+    // Create an array of regex patterns for each term
+    const termPatterns = terms.map(term => new RegExp(term, 'i'));
+    console.log(termPatterns,'termPatterns');
+    console.log(query,'query');
+
+    // Search for products that match the query or any of its terms
+    const products = await Product.find({
+      isActive: true,
+      $or: [
+        // Full query match in different fields
+        { name: { $regex: query, $options: 'i' } },
+        { description: { $regex: query, $options: 'i' } },
+        { sku: { $regex: query, $options: 'i' } },
+        
+        // Match if name contains all the individual terms (in any order)
+        { name: { $all: termPatterns } }
+      ]
+    })
+    .select('name images slug price regularPrice salePrice _id') // Only select fields we need
+    .limit(10) // Limit to 10 results for dropdown
+    .populate('category', 'name slug');
+    
+    console.log(`Search for "${query}" returned ${products.length} results`);
+    
+    // Return empty array instead of error when no products found
+    return res.status(200).json({
+      status: 'success',
+      results: products.length,
+      data: {
+        products
+      }
+    });
+  } catch (error) {
+    console.error('Error in product suggestions:', error);
+    return res.status(500).json({
+      status: 'error',
+      message: 'Error searching products',
+      error: error.message
+    });
+  }
+});
+
+exports.getProductById = catchAsync(async (req, res, next) => {
+  const product = await Product.findById(req.params.id)
+    .populate('category')
+    .populate('subcategory')
+    .populate('variants')
+    .populate({
+      path: 'reviews',
+      select: 'rating title content user createdAt',
+      populate: {
+        path: 'user',
+        select: 'firstName lastName avatar'
+      }
+    });
+
+  if (!product) {
+    return next(new AppError('Product not found', 404));
+  }
+
+  // Update view count
+  product.viewCount = (product.viewCount || 0) + 1;
+  await product.save({ validateBeforeSave: false });
+
+  res.status(200).json({
+    status: 'success',
+    data: {
+      product
+    }
+  });
+});

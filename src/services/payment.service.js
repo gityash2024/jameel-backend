@@ -1,13 +1,13 @@
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const { PAYMENT_STATUS } = require('../constants');
 
-const createPaymentIntent = async (amount, currency, paymentMethodId) => {
+const createPaymentIntent = async (amount, currency, metadata = {}) => {
+  // Create basic payment intent without requiring payment_method
   const paymentIntent = await stripe.paymentIntents.create({
     amount,
     currency,
-    payment_method: paymentMethodId,
-    confirmation_method: 'manual',
-    confirm: true
+    metadata: metadata,
+    payment_method_types: ['card']
   });
 
   return paymentIntent;

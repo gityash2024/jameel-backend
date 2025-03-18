@@ -18,11 +18,7 @@ router.delete('/items/:itemId', cartController.removeItem);
 router.delete('/', cartController.clearCart);
 
 // Apply/remove coupon
-router.post('/apply-coupon', validate({
-  body: {
-    code: 'required|string'
-  }
-}), cartController.applyCoupon);
+router.post('/apply-coupon', cartController.applyCoupon);
 
 router.delete('/remove-coupon', cartController.removeCoupon);
 
