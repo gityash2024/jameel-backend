@@ -204,11 +204,7 @@ exports.resetPassword = catchAsync(async (req, res, next) => {
   resetToken.isUsed = true;
   await resetToken.save();
 
-  // Send confirmation email
-  await sendEmail(user.email, 'Password Changed Successfully', 'password-changed', {
-    firstName: user.firstName
-  });
-
+  // Log the user in
   createSendToken(user, 200, res);
 });
 
@@ -376,4 +372,66 @@ exports.deleteUser = catchAsync(async (req, res, next) => {
     status: 'success',
     data: null
   });
+});
+
+// Google OAuth2 login/signup
+exports.googleAuth = catchAsync(async (req, res, next) => {
+  const { credential } = req.body;
+  
+  if (!credential) {
+    return next(new AppError('No Google credential provided', 400));
+  }
+
+  try {
+    // Verify the token with Google
+    const { OAuth2Client } = require('google-auth-library');
+    const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+    
+    const ticket = await client.verifyIdToken({
+      idToken: credential,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    
+    const payload = ticket.getPayload();
+    
+    // Extract user information from payload
+    const { email, given_name, family_name, picture, sub } = payload;
+
+    // Check if user already exists
+    let user = await User.findOne({ email }).populate('role');
+    
+    if (!user) {
+      // If user doesn't exist, create a new user
+      const customerRole = await Role.findOne({ name: 'customer' });
+      
+      if (!customerRole) {
+        return next(new AppError('Customer role not found', 500));
+      }
+      
+      user = await User.create({
+        firstName: given_name,
+        lastName: family_name,
+        email,
+        password: crypto.randomBytes(20).toString('hex'), // Generate a random password
+        googleId: sub,
+        profileImage: picture,
+        role: customerRole._id,
+        isVerified: true // Automatically verify Google users
+      });
+      
+      user = await User.findById(user._id).populate('role');
+    } else if (!user.googleId) {
+      // If user exists but doesn't have a Google ID, update the user
+      user.googleId = sub;
+      user.profileImage = user.profileImage || picture;
+      user.isVerified = true;
+      await user.save({ validateBeforeSave: false });
+    }
+    
+    // Log the user in
+    createSendToken(user, 200, res);
+  } catch (error) {
+    console.error('Google auth error:', error);
+    return next(new AppError('Failed to authenticate with Google', 400));
+  }
 });

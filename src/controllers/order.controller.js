@@ -11,6 +11,10 @@ const { createNotification } = require('../services/notification.service');
 const { AppError, catchAsync } = require('../utils/appError');
 const APIFeatures = require('../utils/apiFeatures');
 const axios = require('axios');
+const User = require('../models/user.model');
+const { sendOrderConfirmationEmail, sendShippingNotification } = require('../utils/emailService');
+const fedexService = require('../utils/fedexService');
+const Review = require('../models/review.model');
 
 exports.createOrder = catchAsync(async (req, res, next) => {
   let cartItems = [];
@@ -565,28 +569,156 @@ exports.updateOrderStatus = catchAsync(async (req, res, next) => {
   });
 });
 
-exports.updateShipping = catchAsync(async (req, res, next) => {
-  const order = await Order.findById(req.params.id);
+const updateShipping = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { 
+      trackingNumber, 
+      serviceType, 
+      estimatedDeliveryDate,
+      status,
+      packageDetails 
+    } = req.body;
 
-  if (!order) {
-    return next(new AppError('Order not found', 404));
-  }
-
-  order.trackingNumber = req.body.trackingNumber;
-  order.estimatedDeliveryDate = req.body.estimatedDeliveryDate;
-  order.orderStatus = 'shipped';
-  await order.save();
-
-  // Send shipping notification
-  await sendShippingNotifications(order);
-
-  res.status(200).json({
-    status: 'success',
-    data: {
-      order
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: 'Order ID is required'
+      });
     }
-  });
-});
+
+    // Find the order
+    const order = await Order.findById(id);
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+
+    // Initialize shipping object if it doesn't exist
+    if (!order.shipping) {
+      order.shipping = {};
+    }
+
+    // Check if we're adding a new tracking number
+    const isNewTracking = trackingNumber && trackingNumber !== order.shipping.trackingNumber;
+
+    // Update shipping fields if provided
+    if (trackingNumber) {
+      order.shipping.trackingNumber = trackingNumber;
+      
+      try {
+        // Generate tracking URL using FedEx tracking URL
+        order.shipping.trackingUrl = `https://www.fedex.com/fedextrack/?trknbr=${trackingNumber}`;
+        
+        // If this is a new tracking number, update the order status to shipped
+        if (isNewTracking) {
+          order.shipping.shippedAt = new Date();
+          
+          // Only update order status if it's not already delivered
+          if (order.orderStatus !== 'delivered') {
+            order.orderStatus = 'shipped';
+          }
+          
+          // Get initial tracking details from FedEx if possible
+          try {
+            const trackingData = await fedexService.trackShipment(trackingNumber);
+            if (trackingData.estimatedDelivery) {
+              order.shipping.estimatedDeliveryDate = trackingData.estimatedDelivery;
+            }
+          } catch (trackingError) {
+            console.error('Could not fetch initial tracking data:', trackingError.message);
+            // Continue with the update even if tracking fails
+          }
+        }
+      } catch (error) {
+        console.error('Error generating tracking URL:', error);
+        // Continue with the update even if URL generation fails
+      }
+    }
+
+    if (serviceType) {
+      order.shipping.serviceType = serviceType;
+    }
+
+    if (estimatedDeliveryDate) {
+      order.shipping.estimatedDeliveryDate = estimatedDeliveryDate;
+    }
+    
+    if (status) {
+      order.shipping.status = status;
+      
+      // Sync order status with shipping status when applicable
+      switch (status) {
+        case 'delivered':
+          order.orderStatus = 'delivered';
+          order.shipping.deliveredAt = new Date();
+          break;
+        case 'picked_up':
+          if (order.orderStatus !== 'delivered') {
+            order.orderStatus = 'shipped';
+          }
+          break;
+        case 'in_transit':
+          if (order.orderStatus !== 'delivered') {
+            order.orderStatus = 'shipped';
+          }
+          break;
+        case 'out_for_delivery':
+          if (order.orderStatus !== 'delivered') {
+            order.orderStatus = 'out_for_delivery';
+          }
+          break;
+      }
+    }
+    
+    if (packageDetails) {
+      order.shipping.packageDetails = packageDetails;
+    }
+
+    // Save the updated order
+    await order.save();
+
+    // Send shipping notification if adding new tracking
+    if (isNewTracking) {
+      try {
+        // Get user email
+        const user = await User.findById(order.user);
+        if (user && user.email) {
+          await sendShippingNotification(
+            user.email,
+            {
+              orderNumber: order.orderNumber,
+              trackingNumber: order.shipping.trackingNumber,
+              trackingUrl: order.shipping.trackingUrl,
+              estimatedDelivery: order.shipping.estimatedDeliveryDate
+            }
+          );
+        }
+      } catch (emailError) {
+        console.error('Failed to send shipping notification:', emailError);
+        // Continue with the response even if email fails
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Shipping information updated successfully',
+      data: {
+        order
+      }
+    });
+
+  } catch (error) {
+    console.error('Error updating shipping information:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to update shipping information',
+      error: error.message
+    });
+  }
+};
 
 exports.processRefund = catchAsync(async (req, res, next) => {
   const order = await Order.findById(req.params.id);
@@ -1021,3 +1153,399 @@ exports.getSalesAnalytics = catchAsync(async (req, res) => {
     // Implement based on shipping carrier
     return `${process.env.SHIPPING_TRACKING_URL}/${trackingNumber}`;
   };
+
+const trackShipment = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: 'Order ID is required',
+      });
+    }
+    
+    const order = await Order.findById(id);
+    
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found',
+      });
+    }
+    
+    // Check if order has tracking information
+    if (!order.shipping || !order.shipping.trackingNumber) {
+      return res.status(400).json({
+        success: false,
+        message: 'No tracking information available for this order',
+      });
+    }
+    
+    // Get tracking information from FedEx service
+    try {
+      // Import the FedEx service properly
+      const FedExService = require('../utils/fedexService');
+      const fedexServiceInstance = new FedExService();
+      
+      // Try to get real tracking data from FedEx
+      const trackingData = await fedexServiceInstance.trackShipment(order.shipping.trackingNumber);
+      
+      return res.status(200).json({
+        success: true,
+        message: 'Tracking information retrieved successfully',
+        data: trackingData,
+      });
+      
+    } catch (fedexError) {
+      console.error('FedEx Tracking Error:', fedexError.message);
+      
+      // If we can't get tracking from FedEx, return basic information based on order status
+      return res.status(200).json({
+        success: true,
+        message: 'Basic tracking information retrieved',
+        data: {
+          trackingNumber: order.shipping.trackingNumber,
+          status: order.orderStatus,
+          statusDetails: `Order is currently ${order.orderStatus.replace('_', ' ')}`,
+          estimatedDelivery: order.shipping.estimatedDeliveryDate,
+          lastUpdated: new Date().toISOString(),
+          trackingHistory: [
+            {
+              timestamp: order.shipping.shippedAt || order.updatedAt,
+              status: 'SHIPPED',
+              statusDetails: 'Order has been shipped',
+              location: 'Shipping Origin',
+            }
+          ],
+        },
+      });
+    }
+    
+  } catch (error) {
+    console.error('Error tracking shipment:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve tracking information',
+      error: error.message,
+    });
+  }
+};
+
+exports.getDashboardStats = catchAsync(async (req, res, next) => {
+  try {
+    const today = new Date();
+    const startOfToday = new Date(today.setHours(0, 0, 0, 0));
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - today.getDay());
+    startOfWeek.setHours(0, 0, 0, 0);
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    
+    // Get order stats by status
+    const orderStatusCounts = await Order.aggregate([
+      {
+        $group: {
+          _id: "$orderStatus",
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+    
+    // Calculate total orders
+    const totalOrders = await Order.countDocuments();
+    
+    // Process order status counts
+    const orderStats = {
+      pending: 0,
+      processing: 0,
+      shipped: 0,
+      outForDelivery: 0,
+      delivered: 0,
+      cancelled: 0,
+      total: totalOrders
+    };
+    
+    orderStatusCounts.forEach(status => {
+      if (status._id === 'pending') orderStats.pending = status.count;
+      if (status._id === 'processing') orderStats.processing = status.count;
+      if (status._id === 'shipped') orderStats.shipped = status.count;
+      if (status._id === 'out_for_delivery') orderStats.outForDelivery = status.count;
+      if (status._id === 'delivered') orderStats.delivered = status.count;
+      if (status._id === 'cancelled') orderStats.cancelled = status.count;
+    });
+    
+    // Get revenue data
+    const totalRevenue = await Order.aggregate([
+      {
+        $match: {
+          orderStatus: { $nin: ['cancelled', 'refunded'] }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: "$total" }
+        }
+      }
+    ]);
+    
+    const todayRevenue = await Order.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: startOfToday },
+          orderStatus: { $nin: ['cancelled', 'refunded'] }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: "$total" }
+        }
+      }
+    ]);
+    
+    const weekRevenue = await Order.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: startOfWeek },
+          orderStatus: { $nin: ['cancelled', 'refunded'] }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: "$total" }
+        }
+      }
+    ]);
+    
+    const monthRevenue = await Order.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: startOfMonth },
+          orderStatus: { $nin: ['cancelled', 'refunded'] }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: "$total" }
+        }
+      }
+    ]);
+    
+    // Get monthly revenue for the year
+    const revenueByMonth = await Order.aggregate([
+      {
+        $match: {
+          orderStatus: { $nin: ['cancelled', 'refunded'] },
+          createdAt: { 
+            $gte: new Date(new Date().getFullYear(), 0, 1) // Start of current year
+          }
+        }
+      },
+      {
+        $group: {
+          _id: { 
+            month: { $month: "$createdAt" },
+            year: { $year: "$createdAt" }
+          },
+          revenue: { $sum: "$total" }
+        }
+      },
+      {
+        $sort: { "_id.year": 1, "_id.month": 1 }
+      }
+    ]);
+    
+    // Format revenue by month for chart
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const formattedRevenueByMonth = months.map((month, index) => {
+      const entry = revenueByMonth.find(r => r._id.month === index + 1);
+      return {
+        month: `${month} ${new Date().getFullYear().toString().slice(-2)}`,
+        revenue: entry ? parseFloat(entry.revenue.toFixed(2)) : 0
+      };
+    });
+    
+    // Get product statistics
+    const productStats = await Product.aggregate([
+      {
+        $group: {
+          _id: null,
+          total: { $sum: 1 },
+          outOfStock: {
+            $sum: {
+              $cond: [{ $eq: ["$stockQuantity", 0] }, 1, 0]
+            }
+          }
+        }
+      }
+    ]);
+    
+    // Get user statistics
+    const userStats = await User.aggregate([
+      {
+        $group: {
+          _id: null,
+          total: { $sum: 1 },
+          newThisMonth: {
+            $sum: {
+              $cond: [
+                { $gte: ["$createdAt", startOfMonth] },
+                1,
+                0
+              ]
+            }
+          }
+        }
+      }
+    ]);
+    
+    // Get top categories
+    const topCategories = await Order.aggregate([
+      {
+        $match: {
+          orderStatus: { $nin: ['cancelled', 'refunded'] }
+        }
+      },
+      { $unwind: "$items" },
+      {
+        $lookup: {
+          from: "products",
+          localField: "items.product",
+          foreignField: "_id",
+          as: "productDetails"
+        }
+      },
+      { $unwind: "$productDetails" },
+      {
+        $lookup: {
+          from: "categories",
+          localField: "productDetails.category",
+          foreignField: "_id",
+          as: "categoryDetails"
+        }
+      },
+      { $unwind: { path: "$categoryDetails", preserveNullAndEmptyArrays: true } },
+      {
+        $group: {
+          _id: "$categoryDetails.name",
+          orders: { $sum: 1 },
+          earning: { $sum: { $multiply: ["$items.price", "$items.quantity"] } }
+        }
+      },
+      {
+        $sort: { earning: -1 }
+      },
+      {
+        $limit: 6
+      }
+    ]);
+    
+    // Get recent orders
+    const recentOrders = await Order.find()
+      .sort({ createdAt: -1 })
+      .limit(7)
+      .populate('user', 'firstName lastName')
+      .lean();
+    
+    const formattedRecentOrders = recentOrders.map(order => ({
+      number: order.orderNumber,
+      date: new Date(order.createdAt).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' }),
+      name: order.user ? `${order.user.firstName} ${order.user.lastName}` : 'john due',
+      amount: parseFloat(order.total.toFixed(2)),
+      status: order.orderStatus.toUpperCase()
+    }));
+    
+    // Get stock items
+    const stockItems = await Product.find()
+      .sort({ stockQuantity: 1 })
+      .limit(8)
+      .select('name stockQuantity images')
+      .lean();
+    
+    const formattedStockItems = stockItems.map(product => ({
+      name: product.name,
+      quantity: product.stockQuantity,
+      status: product.stockQuantity === 0 ? 'Out Of Stock' : 'In Stock',
+      image: product.images && product.images.length > 0 ? product.images[0].url : ''
+    }));
+    
+    // Get recent reviews
+    const reviews = await Review.find()
+      .sort({ createdAt: -1 })
+      .limit(3)
+      .populate('product', 'name images')
+      .populate('user', 'firstName lastName')
+      .lean();
+    
+    const formattedReviews = reviews.map(review => ({
+      product: review.product ? review.product.name : '',
+      user: review.user ? `${review.user.firstName} ${review.user.lastName}` : 'john due',
+      rating: review.rating,
+      image: review.product && review.product.images && review.product.images.length > 0 
+        ? review.product.images[0].url : ''
+    }));
+    
+    // Return complete dashboard stats
+    res.status(200).json({
+      status: 'success',
+      data: {
+        orderStats,
+        revenue: {
+          total: totalRevenue[0]?.total || 0,
+          today: todayRevenue[0]?.total || 0,
+          thisWeek: weekRevenue[0]?.total || 0,
+          thisMonth: monthRevenue[0]?.total || 0
+        },
+        products: {
+          total: productStats[0]?.total || 0,
+          outOfStock: productStats[0]?.outOfStock || 0
+        },
+        users: {
+          total: userStats[0]?.total || 0,
+          newThisMonth: userStats[0]?.newThisMonth || 0
+        },
+        revenueByMonth: formattedRevenueByMonth,
+        topCategories: topCategories.map(cat => ({
+          name: cat._id || 'Uncategorized',
+          orders: cat.orders,
+          earning: parseFloat(cat.earning.toFixed(2))
+        })),
+        recentOrders: formattedRecentOrders,
+        stockItems: formattedStockItems,
+        reviews: formattedReviews
+      }
+    });
+  } catch (error) {
+    console.error('Error generating dashboard stats:', error);
+    return next(new AppError('Failed to generate dashboard statistics', 500));
+  }
+});
+
+// Collect all exports at the end of the file
+module.exports = {
+  createOrder: exports.createOrder,
+  deleteOrder: exports.deleteOrder,
+  updateRefundStatus: exports.updateRefundStatus,
+  getMyOrders: exports.getMyOrders,
+  verifyPayment: exports.verifyPayment,
+  getMyOrderById: exports.getMyOrderById,
+  cancelOrder: exports.cancelOrder,
+  processPayment: exports.processPayment,
+  setupLayaway: exports.setupLayaway,
+  payLayawayInstallment: exports.payLayawayInstallment,
+  getAllOrders: exports.getAllOrders,
+  getOrderById: exports.getOrderById,
+  updateOrder: exports.updateOrder,
+  updateOrderStatus: exports.updateOrderStatus,
+  processRefund: exports.processRefund,
+  exportOrdersCsv: exports.exportOrdersCsv,
+  generateOrderInvoice: exports.generateOrderInvoice,
+  getOrderAnalytics: exports.getOrderAnalytics,
+  getSalesAnalytics: exports.getSalesAnalytics,
+  updateShipping,
+  trackShipment,
+  getDashboardStats: exports.getDashboardStats
+};

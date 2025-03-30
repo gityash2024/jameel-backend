@@ -68,6 +68,11 @@ const userSchema = new mongoose.Schema({
   passwordResetToken: String,
   passwordResetExpires: Date,
   refreshToken: String,
+  googleId: {
+    type: String,
+    sparse: true,
+    index: true
+  },
 }, {
   timestamps: true,
   toJSON: { virtuals: true },

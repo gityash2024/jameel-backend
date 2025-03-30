@@ -71,7 +71,7 @@ const orderSchema = new mongoose.Schema({
   orderStatus: {
     type: String,
     required: true,
-    enum: ['pending', 'processing', 'shipped', 'delivered', 'cancelled', 'returned', 'refunded'],
+    enum: ['pending', 'processing', 'packed', 'shipped', 'out_for_delivery', 'delivered', 'cancelled', 'returned', 'refunded'],
     default: 'pending'
   },
   subTotal: {
@@ -121,8 +121,53 @@ const orderSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  shipping: {
+    trackingNumber: {
+      type: String,
+      trim: true,
+    },
+    trackingUrl: {
+      type: String,
+      trim: true,
+    },
+    shippedAt: {
+      type: Date,
+    },
+    deliveredAt: {
+      type: Date,
+    },
+    carrier: {
+      type: String,
+      default: 'FedEx',
+      enum: ['FedEx', 'USPS', 'UPS', 'DHL', 'Other'],
+    },
+    serviceType: {
+      type: String,
+      trim: true,
+    },
+    estimatedDeliveryDate: {
+      type: Date,
+    },
+    status: {
+      type: String,
+      enum: ['pending', 'picked_up', 'in_transit', 'out_for_delivery', 'delivered', 'failed_attempt', 'exception', 'returned'],
+      default: 'pending',
+    },
+    packageDetails: {
+      weight: Number,
+      dimensions: {
+        length: Number,
+        width: Number,
+        height: Number,
+      },
+      packageType: String,
+    },
+    labelUrl: {
+      type: String,
+      trim: true,
+    },
+  },
   trackingNumber: String,
-  estimatedDeliveryDate: Date,
   actualDeliveryDate: Date,
   notes: String,
   cancelReason: String,
