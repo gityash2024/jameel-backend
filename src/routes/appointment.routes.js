@@ -12,6 +12,9 @@ router.use(authenticate);
 router.get('/my-appointments', appointmentController.getMyAppointments);
 router.get('/my-appointments/:id', appointmentController.getAppointmentById);
 
+// Custom design appointment route
+router.post('/custom-design', appointmentController.createCustomDesignAppointment);
+
 router.post('/', validate({
   body: {
     serviceId: 'required|string',
@@ -52,11 +55,7 @@ router.get('/', appointmentController.getAllAppointments);
 router.get('/calendar', appointmentController.getAppointmentCalendar);
 router.get('/store/:storeId', appointmentController.getStoreAppointments);
 
-router.put('/:id/status', validate({
-  body: {
-    status: 'required|string|in:scheduled,confirmed,completed,cancelled,no_show'
-  }
-}), appointmentController.updateAppointmentStatus);
+router.put('/:id/status',appointmentController.updateAppointmentStatus);
 
 router.put('/:id/assign', validate({
   body: {

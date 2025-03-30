@@ -1,50 +1,78 @@
 const mongoose = require('mongoose');
 
 const appointmentSchema = new mongoose.Schema({
-  user: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
+  firstName: {
+    type: String,
+    required: [true, 'First name is required'],
+    trim: true
   },
-  service: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Service',
-    required: true
+  lastName: {
+    type: String,
+    required: [true, 'Last name is required'],
+    trim: true
   },
-  store: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Store',
-    required: true
+  email: {
+    type: String,
+    required: [true, 'Email is required'],
+    trim: true,
+    lowercase: true
+  },
+  phone: {
+    type: String,
+    required: [true, 'Phone number is required'],
+    trim: true
+  },
+  productType: {
+    type: String,
+    required: [true, 'Product type is required']
+  },
+  stoneType: {
+    type: String
+  },
+  stoneColor: {
+    type: String
+  },
+  carat: {
+    type: String
+  },
+  metalType: {
+    type: String
   },
   appointmentDate: {
     type: Date,
-    required: true
+    required: [true, 'Appointment date is required']
   },
-  timeSlot: {
-    startTime: String,
-    endTime: String
+  appointmentTime: {
+    type: String,
+    required: [true, 'Appointment time is required']
+  },
+  message: {
+    type: String,
+    trim: true
+  },
+  shoppingFor: {
+    type: String,
+    enum: ['myself', 'someone']
+  },
+  isSpecialOccasion: {
+    type: Boolean,
+    default: false
   },
   status: {
     type: String,
-    enum: ['scheduled', 'confirmed', 'completed', 'cancelled', 'no_show'],
-    default: 'scheduled'
+    enum: ['pending', 'confirmed', 'completed', 'cancelled'],
+    default: 'pending'
   },
-  serviceDetails: {
-    type: Map,
-    of: String
-  },
-  specialRequests: String,
-  cancelReason: String,
-  reminder: {
-    isEnabled: {
-      type: Boolean,
-      default: true
-    },
-    sentAt: Date
-  },
-  staff: {
+  user: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now
+  },
+  updatedAt: {
+    type: Date
   }
 }, {
   timestamps: true

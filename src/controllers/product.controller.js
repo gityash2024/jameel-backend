@@ -9,6 +9,8 @@ const { uploadToCloudinary, deleteFromCloudinary } = require('../../config/cloud
 const { AppError, catchAsync } = require('../utils/appError'); // Fix: Import AppError as named import
 // const APIFeatures = require('../utils/apiFeatures');
 const { cache } = require('../middleware/cache.middleware');
+const mongoose = require('mongoose');
+
 exports.uploadProductImages = catchAsync(async (req, res, next) => {
   if (!req.files) return next();
 
@@ -185,7 +187,18 @@ exports.getFeaturedProducts = catchAsync(async (req, res) => {
     });
   });
   exports.getProduct = catchAsync(async (req, res, next) => {
-    const product = await Product.findById(req.params.id)
+    const { id } = req.params;
+
+    // Log the requested ID for debugging
+    console.log(`Getting product with ID: ${id}`);
+
+    // Check if ID is a valid MongoDB ObjectId
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      console.log(`Invalid MongoDB ObjectId format: ${id}`);
+      return next(new AppError('Invalid product ID format', 400));
+    }
+
+    const product = await Product.findById(id)
       .populate('category')
       .populate('subcategory')
       .populate('variants')
@@ -196,20 +209,53 @@ exports.getFeaturedProducts = catchAsync(async (req, res) => {
           path: 'user',
           select: 'firstName lastName avatar'
         }
-      });
-  
+      })
+      .lean(); // Using lean() for better performance
+
     if (!product) {
+      console.log(`Product not found with ID: ${id}`);
       return next(new AppError('Product not found', 404));
     }
-  
+
+    console.log(`Found product: ${product.name} (${product._id})`);
+
+    // Include all jewelry details always, even if null
+    const jewelryDetails = {
+      stone: product.stone || null,
+      totalWeight: product.totalWeight || null,
+      color: product.color || null,
+      clarity: product.clarity || null,
+      stoneType: product.stoneType || null,
+      stoneColor: product.stoneColor || null,
+      stoneShape: product.stoneShape || null,
+      stoneCaratRange: product.stoneCaratRange || null,
+      stoneClass: product.stoneClass || null,
+      stoneSetting: product.stoneSetting || null,
+      settingOnly: product.settingOnly || false,
+      metalType: product.metalType || null,
+      metalColor: product.metalColor || null,
+      metalFinish: product.metalFinish || null,
+      goldKarat: product.goldKarat || null,
+      ringDesign: product.ringDesign || null,
+      ringStyle: product.ringStyle || null,
+      standardRingSize: product.standardRingSize || null,
+      height: product.height || null,
+    };
+
     // Update view count
-    product.viewCount = (product.viewCount || 0) + 1;
-    await product.save({ validateBeforeSave: false });
-  
+    await Product.findByIdAndUpdate(
+      id, 
+      { $inc: { viewCount: 1 } }, 
+      { new: true, runValidators: false }
+    );
+
     res.status(200).json({
       status: 'success',
       data: {
-        product
+        product: {
+          ...product,
+          ...jewelryDetails
+        }
       }
     });
   });

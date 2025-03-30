@@ -27,18 +27,16 @@ const productSchema = new mongoose.Schema({
     type: String,
     enum: ['physical', 'digital']
   },
- // In productSchema, update the category and subCategories fields:
-
-category: {
-  type: mongoose.Schema.Types.ObjectId,
-  ref: 'Category',
-  required: true
-},
-subcategory: {  // Changed from subCategories array to single subcategory
-  type: mongoose.Schema.Types.ObjectId,
-  ref: 'Subcategory',
-  required: true
-},
+  category: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Category',
+    required: true
+  },
+  subcategory: {  // Changed from subCategories array to single subcategory
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Subcategory',
+    required: true
+  },
   subCategories: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Category'
@@ -47,7 +45,66 @@ subcategory: {  // Changed from subCategories array to single subcategory
     type: String,
     required: true
   },
- 
+  // Jewelry-specific fields
+  stone: {
+    type: String,
+  },
+  totalWeight: {
+    type: Number,
+  },
+  color: {
+    type: String,
+  },
+  clarity: {
+    type: String,
+  },
+  stoneType: {
+    type: String,
+  },
+  stoneColor: {
+    type: String,
+  },
+  stoneShape: {
+    type: String,
+  },
+  stoneCaratRange: {
+    type: String,
+  },
+  stoneClass: {
+    type: String,
+  },
+  stoneSetting: {
+    type: String,
+  },
+  settingOnly: {
+    type: Boolean,
+    default: false
+  },
+  metalType: {
+    type: String,
+  },
+  metalColor: {
+    type: String,
+  },
+  metalFinish: {
+    type: String,
+  },
+  goldKarat: {
+    type: String,
+  },
+  ringDesign: {
+    type: String,
+  },
+  ringStyle: {
+    type: String,
+  },
+  standardRingSize: {
+    type: String,
+  },
+  height: {
+    type: String,
+  },
+  // End of jewelry-specific fields
   regularPrice: {
     type: Number,
     required: [true, 'Regular price is required'],

@@ -109,7 +109,8 @@ exports.STATUS_CODES = {
     ORDER_CONFIRMATION: 'order_confirmation',
     PASSWORD_RESET: 'password_reset',
     APPOINTMENT_CONFIRMATION: 'appointment_confirmation',
-    SHIPPING_CONFIRMATION: 'shipping_confirmation'
+    SHIPPING_CONFIRMATION: 'shipping_confirmation',
+    CUSTOM_DESIGN_CONFIRMATION: 'custom-design-confirmation'
   };
   
   exports.SHIPPING_METHODS = {

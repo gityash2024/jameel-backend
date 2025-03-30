@@ -23,6 +23,7 @@ const roleRoutes = require('./role.routes');
 const tagRoutes = require('./tag.routes');
 const subCategoryRoutes = require('./subcategory.routes');
 const helpcenter = require('./helpcenter.routes');
+const bannerRoutes = require('./banner.routes');
 
 
 
@@ -78,6 +79,7 @@ router.use('/roles', roleRoutes);
 router.use('/tags', tagRoutes);
 router.use('/subcategories', subCategoryRoutes);
 router.use('/support-tickets', helpcenter);
+router.use('/banners', bannerRoutes);
 
 
 // Version info endpoint

@@ -1,6 +1,7 @@
 // src/config/cloudinary.js
 const cloudinary = require('cloudinary').v2;
 const logger = require('./logging');
+const fs = require('fs');
 
 // Configure Cloudinary
 cloudinary.config({
@@ -25,7 +26,73 @@ const defaultOptions = {
 const uploadToCloudinary = async (file, customOptions = {}) => {
   try {
     const options = { ...defaultOptions, ...customOptions };
-    const result = await cloudinary.uploader.upload(file.path, options);
+    
+    console.log('Attempting Cloudinary upload with file:', {
+      type: typeof file,
+      isEmpty: !file,
+      hasBuffer: file && !!file.buffer,
+      hasPath: file && !!file.path,
+      mimeType: file && file.mimetype,
+      size: file && file.size,
+      fieldname: file && file.fieldname,
+      originalname: file && file.originalname
+    });
+    
+    // Handle different file formats
+    let result;
+    
+    if (!file) {
+      throw new Error('No file provided for upload');
+    }
+    
+    try {
+      if (file.buffer) {
+        // If file has a buffer (memory storage)
+        console.log('Uploading from buffer with mimetype:', file.mimetype);
+        const b64 = Buffer.from(file.buffer).toString('base64');
+        const dataURI = `data:${file.mimetype};base64,${b64}`;
+        result = await cloudinary.uploader.upload(dataURI, options);
+      } else if (file.path) {
+        // If file has a path (disk storage)
+        console.log('Uploading from path:', file.path);
+        // Verify file exists before upload
+        if (fs.existsSync(file.path)) {
+          result = await cloudinary.uploader.upload(file.path, options);
+          
+          // Clean up the temp file after upload
+          try {
+            fs.unlinkSync(file.path);
+          } catch (unlinkError) {
+            logger.warn(`Failed to remove temp file ${file.path}: ${unlinkError.message}`);
+          }
+        } else {
+          throw new Error(`File path does not exist: ${file.path}`);
+        }
+      } else if (typeof file === 'string') {
+        // If file is already a string (URL or base64)
+        console.log('Uploading from string');
+        result = await cloudinary.uploader.upload(file, options);
+      } else {
+        console.error('Invalid file format:', JSON.stringify(file, null, 2));
+        throw new Error('Invalid file format. Expected buffer, path, or string.');
+      }
+    } catch (uploadErr) {
+      console.error('Error during Cloudinary upload operation:', uploadErr);
+      throw new Error(`Upload operation failed: ${uploadErr.message}`);
+    }
+    
+    if (!result || !result.secure_url) {
+      console.error('Cloudinary response missing secure_url:', result);
+      throw new Error('Invalid response from Cloudinary: Missing image URL');
+    }
+    
+    console.log('Cloudinary upload successful:', {
+      public_id: result.public_id,
+      secure_url: result.secure_url
+    });
+    
+    logger.info(`File uploaded to Cloudinary: ${result.public_id}`);
+    
     return {
       public_id: result.public_id,
       url: result.secure_url,
@@ -35,8 +102,9 @@ const uploadToCloudinary = async (file, customOptions = {}) => {
       bytes: result.bytes
     };
   } catch (error) {
+    console.error('Cloudinary upload detailed error:', error);
     logger.error('Cloudinary upload error:', error);
-    throw new Error('File upload failed');
+    throw new Error(`File upload failed: ${error.message}`);
   }
 };
 

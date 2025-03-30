@@ -299,9 +299,6 @@ exports.getAvailableTimeSlots = catchAsync(async (req, res) => {
 exports.getAllAppointments = catchAsync(async (req, res) => {
   const appointments = await Appointment.find()
     .populate('user')
-    .populate('service')
-    .populate('store')
-    .populate('staff')
     .sort({ appointmentDate: -1 });
 
   res.status(200).json({
@@ -328,9 +325,7 @@ exports.getAppointmentCalendar = catchAsync(async (req, res) => {
 
   const appointments = await Appointment.find(query)
     .populate('user')
-    .populate('service')
-    .populate('store')
-    .populate('staff');
+    .sort({ appointmentDate: -1 });
 
   res.status(200).json({
     status: 'success',
@@ -344,9 +339,7 @@ exports.updateAppointmentStatus = catchAsync(async (req, res) => {
   const { status } = req.body;
 
   const appointment = await Appointment.findById(req.params.id)
-    .populate('user')
-    .populate('service')
-    .populate('store');
+    .populate('user');
 
   if (!appointment) {
     throw new AppError('Appointment not found', 404);
@@ -564,6 +557,75 @@ exports.getServiceDemandAnalytics = catchAsync(async (req, res) => {
     status: 'success',
     data: {
       demand
+    }
+  });
+});
+
+// Add custom design appointment handler
+exports.createCustomDesignAppointment = catchAsync(async (req, res) => {
+  const {
+    firstName,
+    lastName,
+    email,
+    phone,
+    productType,
+    stoneType,
+    stoneColor,
+    carat,
+    metalType,
+    message,
+    appointmentDate,
+    appointmentTime,
+    shoppingFor,
+    isSpecialOccasion
+  } = req.body;
+
+  // Create appointment
+  const appointment = await Appointment.create({
+    firstName,
+    lastName,
+    email,
+    phone,
+    productType,
+    stoneType,
+    stoneColor,
+    carat,
+    metalType,
+    message,
+    appointmentDate,
+    appointmentTime,
+    shoppingFor,
+    isSpecialOccasion,
+    status: 'pending',
+    user: req.user ? req.user._id : null
+  });
+
+  // Send confirmation email
+  await sendEmail(email, 'Custom Design Appointment Confirmation', 'custom-design-confirmation', {
+    appointment,
+    user: req.user
+  });
+
+  // Send SMS notification if phone number exists
+  if (phone) {
+    const formattedDate = new Date(appointmentDate).toLocaleDateString();
+    await sendSms(phone, `Your custom design appointment has been scheduled for ${formattedDate} at ${appointmentTime}`);
+  }
+
+  // Create notification if user is logged in
+  if (req.user) {
+    await createNotification(
+      req.user._id,
+      'appointment',
+      'Custom Design Appointment Scheduled',
+      `Your custom design appointment has been scheduled for ${new Date(appointmentDate).toLocaleDateString()} at ${appointmentTime}`
+    );
+  }
+
+  res.status(201).json({
+    status: 'success',
+    data: {
+      appointment
     }
   });
 });
