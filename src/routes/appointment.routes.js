@@ -4,6 +4,7 @@ const router = express.Router();
 const { authenticate, authorize } = require('../middleware/auth.middleware');
 const {validate} = require('../middleware/validate.middleware');
 const appointmentController = require('../controllers/appointment.controller');
+const appointmentValidator = require('../validators/appointment.validator');
 
 // All routes require authentication
 router.use(authenticate);
@@ -13,7 +14,7 @@ router.get('/my-appointments', appointmentController.getMyAppointments);
 router.get('/my-appointments/:id', appointmentController.getAppointmentById);
 
 // Custom design appointment route
-router.post('/custom-design', appointmentController.createCustomDesignAppointment);
+router.post('/custom-design', appointmentValidator.createCustomDesignAppointment, validate, appointmentController.createCustomDesignAppointment);
 
 router.post('/', validate({
   body: {

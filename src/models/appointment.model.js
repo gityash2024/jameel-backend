@@ -58,6 +58,11 @@ const appointmentSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  store: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Store',
+    required: [true, 'Store is required']
+  },
   status: {
     type: String,
     enum: ['pending', 'confirmed', 'completed', 'cancelled'],

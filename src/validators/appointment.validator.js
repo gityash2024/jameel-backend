@@ -1,7 +1,7 @@
 // src/validators/appointment.validator.js
 const { body, param, query } = require('express-validator');
 const mongoose = require('mongoose');
-const { APPOINTMENT_STATUS } = require('../constants');
+const { APPOINTMENT_STATUS } = require('../utils/constants');
 const moment = require('moment');
 
 exports.createAppointment = [
@@ -194,4 +194,97 @@ exports.cancelAppointment = [
     .trim()
     .isLength({ min: 10, max: 500 })
     .withMessage('Cancellation reason must be between 10 and 500 characters')
+];
+
+// Custom design appointment validator
+exports.createCustomDesignAppointment = [
+  body('firstName')
+    .notEmpty()
+    .withMessage('First name is required')
+    .isString()
+    .trim(),
+
+  body('lastName')
+    .notEmpty()
+    .withMessage('Last name is required')
+    .isString()
+    .trim(),
+
+  body('email')
+    .notEmpty()
+    .withMessage('Email is required')
+    .isEmail()
+    .withMessage('Invalid email format')
+    .normalizeEmail(),
+
+  body('phone')
+    .notEmpty()
+    .withMessage('Phone number is required')
+    .matches(/^\+?[0-9\s\-()]{7,15}$/)
+    .withMessage('Please enter a valid phone number'),
+
+  body('productType')
+    .notEmpty()
+    .withMessage('Product type is required')
+    .isString()
+    .trim(),
+
+  body('appointmentDate')
+    .notEmpty()
+    .withMessage('Appointment date is required')
+    .isISO8601()
+    .withMessage('Invalid date format')
+    .custom(value => {
+      if (moment(value).isBefore(moment(), 'day')) {
+        throw new Error('Appointment date cannot be in the past');
+      }
+      return true;
+    }),
+
+  body('appointmentTime')
+    .notEmpty()
+    .withMessage('Appointment time is required')
+    .isString()
+    .trim(),
+
+  body('storeId')
+    .notEmpty()
+    .withMessage('Store is required')
+    .custom(value => mongoose.Types.ObjectId.isValid(value))
+    .withMessage('Invalid store ID'),
+
+  body('stoneType')
+    .optional()
+    .isString()
+    .trim(),
+
+  body('stoneColor')
+    .optional()
+    .isString()
+    .trim(),
+
+  body('carat')
+    .optional()
+    .isString()
+    .trim(),
+
+  body('metalType')
+    .optional()
+    .isString()
+    .trim(),
+
+  body('message')
+    .optional()
+    .isString()
+    .trim(),
+
+  body('shoppingFor')
+    .optional()
+    .isIn(['myself', 'someone'])
+    .withMessage('Shopping for must be either "myself" or "someone"'),
+
+  body('isSpecialOccasion')
+    .optional()
+    .isBoolean()
+    .withMessage('isSpecialOccasion must be a boolean')
 ];

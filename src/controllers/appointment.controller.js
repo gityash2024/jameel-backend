@@ -299,6 +299,7 @@ exports.getAvailableTimeSlots = catchAsync(async (req, res) => {
 exports.getAllAppointments = catchAsync(async (req, res) => {
   const appointments = await Appointment.find()
     .populate('user')
+    .populate('store')
     .sort({ appointmentDate: -1 });
 
   res.status(200).json({
@@ -577,8 +578,17 @@ exports.createCustomDesignAppointment = catchAsync(async (req, res) => {
     appointmentDate,
     appointmentTime,
     shoppingFor,
-    isSpecialOccasion
+    isSpecialOccasion,
+    storeId
   } = req.body;
+
+  // Check if store exists
+  if (storeId) {
+    const storeExists = await Store.findById(storeId);
+    if (!storeExists) {
+      throw new AppError('Store not found', 404);
+    }
+  }
 
   // Create appointment
   const appointment = await Appointment.create({
@@ -596,6 +606,7 @@ exports.createCustomDesignAppointment = catchAsync(async (req, res) => {
     appointmentTime,
     shoppingFor,
     isSpecialOccasion,
+    store: storeId,
     status: 'pending',
     user: req.user ? req.user._id : null
   });
