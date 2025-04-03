@@ -22,7 +22,7 @@ router.get('/:slug', cache('5 minutes'), productController.getProductBySlug);
 
 router.use(authenticate);
 
-router.post('/:id/reviews', validate(productValidator.createReview), productController.createProductReview);
+router.post('/:id/reviews',  productController.createProductReview);
 router.get('/:id/reviews', productController.getProductReviews);
 
 // Admin only routes

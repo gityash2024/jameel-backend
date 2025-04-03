@@ -574,25 +574,28 @@ const updateShipping = async (req, res) => {
     const { id } = req.params;
     const { 
       trackingNumber, 
+      status, 
       serviceType, 
-      estimatedDeliveryDate,
-      status,
-      packageDetails 
+      estimatedDeliveryDate, 
+      packageDetails, 
+      comments,
+      carrierInfo
     } = req.body;
 
     if (!id) {
       return res.status(400).json({
         success: false,
-        message: 'Order ID is required'
+        message: 'Order ID is required',
       });
     }
 
-    // Find the order
+    // Find the order by ID
     const order = await Order.findById(id);
+
     if (!order) {
       return res.status(404).json({
         success: false,
-        message: 'Order not found'
+        message: 'Order not found',
       });
     }
 
@@ -609,8 +612,33 @@ const updateShipping = async (req, res) => {
       order.shipping.trackingNumber = trackingNumber;
       
       try {
-        // Generate tracking URL using FedEx tracking URL
-        order.shipping.trackingUrl = `https://www.fedex.com/fedextrack/?trknbr=${trackingNumber}`;
+        // Generate tracking URL
+        if (carrierInfo && carrierInfo.carrier) {
+          // Set the carrier info
+          order.shipping.carrier = carrierInfo.carrier;
+          
+          // Create carrier-specific tracking URL
+          switch (carrierInfo.carrier.toUpperCase()) {
+            case 'FEDEX':
+              order.shipping.trackingUrl = `https://www.fedex.com/fedextrack/?trknbr=${trackingNumber}`;
+              break;
+            case 'UPS':
+              order.shipping.trackingUrl = `https://www.ups.com/track?tracknum=${trackingNumber}`;
+              break;
+            case 'USPS':
+              order.shipping.trackingUrl = `https://tools.usps.com/go/TrackConfirmAction?tLabels=${trackingNumber}`;
+              break;
+            case 'DHL':
+              order.shipping.trackingUrl = `https://www.dhl.com/global-en/home/tracking.html?tracking-id=${trackingNumber}`;
+              break;
+            default:
+              order.shipping.trackingUrl = `${process.env.STORE_URL}/track?number=${trackingNumber}`;
+          }
+        } else {
+          // Default to FedEx if no carrier specified
+          order.shipping.carrier = 'FedEx';
+          order.shipping.trackingUrl = `https://www.fedex.com/fedextrack/?trknbr=${trackingNumber}`;
+        }
         
         // If this is a new tracking number, update the order status to shipped
         if (isNewTracking) {
@@ -621,15 +649,43 @@ const updateShipping = async (req, res) => {
             order.orderStatus = 'shipped';
           }
           
+          // Add entry to tracking history
+          if (!order.shipping.trackingHistory) {
+            order.shipping.trackingHistory = [];
+          }
+          
+          order.shipping.trackingHistory.unshift({
+            status: 'SHIPPED',
+            statusDetails: 'Shipping label created',
+            location: process.env.STORE_CITY || 'Shipping Origin',
+            timestamp: new Date(),
+            isException: false
+          });
+          
           // Get initial tracking details from FedEx if possible
-          try {
-            const trackingData = await fedexService.trackShipment(trackingNumber);
-            if (trackingData.estimatedDelivery) {
-              order.shipping.estimatedDeliveryDate = trackingData.estimatedDelivery;
+          if (order.shipping.carrier === 'FedEx') {
+            try {
+              const fedexService = require('../utils/fedex.service');
+              const trackingData = await fedexService.trackShipment(trackingNumber);
+              
+              if (trackingData.estimatedDeliveryDate) {
+                order.shipping.estimatedDeliveryDate = new Date(trackingData.estimatedDeliveryDate);
+              }
+              
+              // If FedEx returned tracking events, update our tracking history
+              if (trackingData.events && Array.isArray(trackingData.events) && trackingData.events.length > 0) {
+                order.shipping.trackingHistory = trackingData.events.map(event => ({
+                  status: event.status || 'UPDATE',
+                  statusDetails: event.description,
+                  location: event.location,
+                  timestamp: new Date(event.timestamp),
+                  isException: event.description && event.description.toLowerCase().includes('exception')
+                }));
+              }
+            } catch (trackingError) {
+              console.error('Could not fetch initial tracking data:', trackingError.message);
+              // Continue with the update even if tracking fails
             }
-          } catch (trackingError) {
-            console.error('Could not fetch initial tracking data:', trackingError.message);
-            // Continue with the update even if tracking fails
           }
         }
       } catch (error) {
@@ -643,11 +699,26 @@ const updateShipping = async (req, res) => {
     }
 
     if (estimatedDeliveryDate) {
-      order.shipping.estimatedDeliveryDate = estimatedDeliveryDate;
+      order.shipping.estimatedDeliveryDate = new Date(estimatedDeliveryDate);
     }
     
     if (status) {
+      const previousStatus = order.shipping.status;
       order.shipping.status = status;
+      
+      // Add entry to tracking history for status changes
+      if (previousStatus !== status) {
+        if (!order.shipping.trackingHistory) {
+          order.shipping.trackingHistory = [];
+        }
+        
+        order.shipping.trackingHistory.unshift({
+          status: status.toUpperCase(),
+          statusDetails: `Status updated to ${status.replace('_', ' ')}`,
+          timestamp: new Date(),
+          isException: status === 'exception' || status === 'failed_attempt'
+        });
+      }
       
       // Sync order status with shipping status when applicable
       switch (status) {
@@ -656,10 +727,7 @@ const updateShipping = async (req, res) => {
           order.shipping.deliveredAt = new Date();
           break;
         case 'picked_up':
-          if (order.orderStatus !== 'delivered') {
-            order.orderStatus = 'shipped';
-          }
-          break;
+        case 'ready_for_pickup':
         case 'in_transit':
           if (order.orderStatus !== 'delivered') {
             order.orderStatus = 'shipped';
@@ -670,12 +738,29 @@ const updateShipping = async (req, res) => {
             order.orderStatus = 'out_for_delivery';
           }
           break;
+        case 'returned':
+          order.orderStatus = 'returned';
+          break;
+        case 'cancelled':
+          order.orderStatus = 'cancelled';
+          order.shipping.cancellationDate = new Date();
+          break;
       }
     }
     
     if (packageDetails) {
-      order.shipping.packageDetails = packageDetails;
+      order.shipping.packageDetails = {
+        ...order.shipping.packageDetails,
+        ...packageDetails
+      };
     }
+    
+    if (comments) {
+      order.shipping.comments = comments;
+    }
+    
+    // Update last updated timestamp
+    order.shipping.lastUpdated = new Date();
 
     // Save the updated order
     await order.save();
@@ -692,7 +777,8 @@ const updateShipping = async (req, res) => {
               orderNumber: order.orderNumber,
               trackingNumber: order.shipping.trackingNumber,
               trackingUrl: order.shipping.trackingUrl,
-              estimatedDelivery: order.shipping.estimatedDeliveryDate
+              estimatedDelivery: order.shipping.estimatedDeliveryDate,
+              carrier: order.shipping.carrier
             }
           );
         }
@@ -1182,19 +1268,96 @@ const trackShipment = async (req, res) => {
       });
     }
     
-    // Get tracking information from FedEx service
+    // Import the FedEx service properly
+    const fedexService = require('../utils/fedex.service');
+    
     try {
-      // Import the FedEx service properly
-      const FedExService = require('../utils/fedexService');
-      const fedexServiceInstance = new FedExService();
-      
       // Try to get real tracking data from FedEx
-      const trackingData = await fedexServiceInstance.trackShipment(order.shipping.trackingNumber);
+      const trackingData = await fedexService.trackShipment(order.shipping.trackingNumber);
+      
+      // Update order with latest tracking information
+      if (!order.shipping) {
+        order.shipping = {};
+      }
+      
+      // Update shipping status based on the tracking result
+      if (trackingData.status) {
+        const statusMapping = {
+          'Delivered': 'delivered',
+          'In transit': 'in_transit',
+          'Picked up': 'picked_up',
+          'Out for delivery': 'out_for_delivery',
+          'Shipment information sent to FedEx': 'pending',
+          'Attempted delivery': 'failed_attempt',
+          'Exception': 'exception',
+          'Return to shipper': 'returned'
+        };
+        
+        // Convert FedEx status to our system status
+        for (const [fedexStatus, ourStatus] of Object.entries(statusMapping)) {
+          if (trackingData.status.includes(fedexStatus)) {
+            order.shipping.status = ourStatus;
+            break;
+          }
+        }
+      }
+      
+      // Add delivery date if delivered
+      if (trackingData.status && trackingData.status.includes('Delivered')) {
+        order.shipping.deliveredAt = new Date();
+        order.orderStatus = 'delivered';
+      }
+      
+      // Update estimated delivery date if provided
+      if (trackingData.estimatedDeliveryDate) {
+        order.shipping.estimatedDeliveryDate = new Date(trackingData.estimatedDeliveryDate);
+      }
+      
+      // Update received by information
+      if (trackingData.receivedBy) {
+        order.shipping.receivedBy = trackingData.receivedBy;
+      }
+      
+      // Update tracking history entries - convert FedEx events to our format
+      if (trackingData.events && Array.isArray(trackingData.events)) {
+        order.shipping.trackingHistory = trackingData.events.map(event => ({
+          status: event.status || 'UPDATE',
+          statusDetails: event.description,
+          location: event.location,
+          timestamp: new Date(event.timestamp),
+          isException: event.description && event.description.toLowerCase().includes('exception')
+        }));
+        
+        // Sort tracking history by timestamp (newest first)
+        order.shipping.trackingHistory.sort((a, b) => b.timestamp - a.timestamp);
+        
+        // Update last updated timestamp
+        order.shipping.lastUpdated = new Date();
+      }
+      
+      // Save the updated order
+      await order.save();
       
       return res.status(200).json({
         success: true,
         message: 'Tracking information retrieved successfully',
-        data: trackingData,
+        data: {
+          trackingInfo: {
+            trackingNumber: order.shipping.trackingNumber,
+            carrier: order.shipping.carrier || 'FedEx',
+            status: order.shipping.status,
+            statusDetails: trackingData.status,
+            estimatedDeliveryDate: order.shipping.estimatedDeliveryDate,
+            trackingUrl: order.shipping.trackingUrl,
+            lastUpdated: order.shipping.lastUpdated,
+            serviceType: order.shipping.serviceType,
+            receivedBy: order.shipping.receivedBy,
+            deliveredAt: order.shipping.deliveredAt,
+            trackingHistory: order.shipping.trackingHistory,
+            packageDetails: order.shipping.packageDetails
+          },
+          orderStatus: order.orderStatus
+        }
       });
       
     } catch (fedexError) {
@@ -1203,22 +1366,28 @@ const trackShipment = async (req, res) => {
       // If we can't get tracking from FedEx, return basic information based on order status
       return res.status(200).json({
         success: true,
-        message: 'Basic tracking information retrieved',
+        message: 'Basic tracking information retrieved (FedEx API unavailable)',
         data: {
-          trackingNumber: order.shipping.trackingNumber,
-          status: order.orderStatus,
-          statusDetails: `Order is currently ${order.orderStatus.replace('_', ' ')}`,
-          estimatedDelivery: order.shipping.estimatedDeliveryDate,
-          lastUpdated: new Date().toISOString(),
-          trackingHistory: [
-            {
-              timestamp: order.shipping.shippedAt || order.updatedAt,
+          trackingInfo: {
+            trackingNumber: order.shipping.trackingNumber,
+            carrier: order.shipping.carrier || 'FedEx',
+            status: order.shipping.status || 'pending',
+            statusDetails: `Order is currently ${(order.shipping.status || order.orderStatus).replace('_', ' ')}`,
+            estimatedDeliveryDate: order.shipping.estimatedDeliveryDate,
+            trackingUrl: order.shipping.trackingUrl,
+            lastUpdated: order.shipping.lastUpdated || order.updatedAt,
+            serviceType: order.shipping.serviceType,
+            packageDetails: order.shipping.packageDetails,
+            trackingHistory: order.shipping.trackingHistory || [{
               status: 'SHIPPED',
               statusDetails: 'Order has been shipped',
               location: 'Shipping Origin',
-            }
-          ],
-        },
+              timestamp: order.shipping.shippedAt || order.updatedAt,
+              isException: false
+            }]
+          },
+          orderStatus: order.orderStatus
+        }
       });
     }
     

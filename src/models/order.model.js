@@ -150,7 +150,7 @@ const orderSchema = new mongoose.Schema({
     },
     status: {
       type: String,
-      enum: ['pending', 'picked_up', 'in_transit', 'out_for_delivery', 'delivered', 'failed_attempt', 'exception', 'returned'],
+      enum: ['pending', 'ready_for_pickup', 'picked_up', 'in_transit', 'out_for_delivery', 'delivered', 'failed_attempt', 'exception', 'returned', 'cancelled'],
       default: 'pending',
     },
     packageDetails: {
@@ -159,6 +159,11 @@ const orderSchema = new mongoose.Schema({
         length: Number,
         width: Number,
         height: Number,
+        unit: {
+          type: String,
+          default: 'IN',
+          enum: ['IN', 'CM']
+        }
       },
       packageType: String,
     },
@@ -166,6 +171,56 @@ const orderSchema = new mongoose.Schema({
       type: String,
       trim: true,
     },
+    shipmentId: {
+      type: String,
+      trim: true,
+    },
+    packageCount: {
+      type: Number,
+      default: 1
+    },
+    lastUpdated: {
+      type: Date,
+      default: Date.now
+    },
+    trackingHistory: [{
+      status: {
+        type: String,
+        required: true
+      },
+      statusDetails: {
+        type: String
+      },
+      location: {
+        type: String
+      },
+      timestamp: {
+        type: Date,
+        required: true
+      },
+      isException: {
+        type: Boolean,
+        default: false
+      }
+    }],
+    receivedBy: {
+      type: String,
+      trim: true
+    },
+    proofOfDeliveryUrl: {
+      type: String,
+      trim: true
+    },
+    signature: {
+      type: String,
+      trim: true
+    },
+    cancellationDate: {
+      type: Date
+    },
+    comments: {
+      type: String
+    }
   },
   trackingNumber: String,
   actualDeliveryDate: Date,
