@@ -7,8 +7,8 @@ const AppError = require('../utils/appError');
 // Create different rate limiters for different purposes
 const createRateLimiter = (options) => {
   const defaultOptions = {
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 200, // limit each IP to 100 requests per windowMs
+    windowMs: 10 * 60 * 1000, // 15 minutes
+    max: 200000, // limit each IP to 100 requests per windowMs
     message: 'Too many requests from this IP, please try again later.',
     statusCode: 429,
     headers: true,
